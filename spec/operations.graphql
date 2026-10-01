@@ -1,16 +1,23 @@
-"""GraphQL documents for the Mina daemon API.
+# Mina SDK common API: the GraphQL documents of the public daemon API
+# (port 3085) that the Mina SDKs send.
+#
+# This file and SPEC.md are the specification (o1-labs/mina-sdk-spec). Each
+# SDK keeps a copy at a pinned tag (spec/VERSION) and a test that its query
+# strings are these documents, up to white space. CI in this repository
+# validates the documents against schema/daemon.graphql and against live
+# daemons. Change the documents here first, then in every SDK.
+#
+# Rules:
+# - One named operation per method. The SDKs send the operation name too.
+# - Nullable variables are always sent, as null when the caller omits them:
+#   the daemon rejects a declared variable that is absent from the request.
+# - Where the SDKs had different selections, this is their union.
 
-These are the documents of ``spec/operations.graphql``, the common API of the
-Mina SDKs (see ``spec/SPEC.md``). ``spec/`` is a copy of o1-labs/mina-sdk-spec
-at the tag in ``spec/VERSION``; ``tests/test_spec.py`` checks that these
-documents stay identical. Change the specification first.
-"""
-
-SYNC_STATUS = """query SyncStatus {
+query SyncStatus {
   syncStatus
-}"""
+}
 
-DAEMON_STATUS = """query DaemonStatus {
+query DaemonStatus {
   daemonStatus {
     syncStatus
     blockchainLength
@@ -37,9 +44,9 @@ DAEMON_STATUS = """query DaemonStatus {
       libp2pPort
     }
   }
-}"""
+}
 
-DAEMON_METRICS = """query DaemonMetrics {
+query DaemonMetrics {
   daemonStatus {
     metrics {
       blockProductionDelay
@@ -53,13 +60,13 @@ DAEMON_METRICS = """query DaemonMetrics {
       snarkPoolSize
     }
   }
-}"""
+}
 
-NETWORK_ID = """query NetworkId {
+query NetworkId {
   networkID
-}"""
+}
 
-GET_ACCOUNT = """query Account($publicKey: PublicKey!, $token: TokenId) {
+query Account($publicKey: PublicKey!, $token: TokenId) {
   account(publicKey: $publicKey, token: $token) {
     publicKey
     nonce
@@ -103,9 +110,9 @@ GET_ACCOUNT = """query Account($publicKey: PublicKey!, $token: TokenId) {
     provedState
     zkappUri
   }
-}"""
+}
 
-BEST_CHAIN = """query BestChain($maxLength: Int) {
+query BestChain($maxLength: Int) {
   bestChain(maxLength: $maxLength) {
     stateHash
     commandTransactionCount
@@ -170,9 +177,9 @@ BEST_CHAIN = """query BestChain($maxLength: Int) {
       }
     }
   }
-}"""
+}
 
-GENESIS_BLOCK = """query GenesisBlock {
+query GenesisBlock {
   genesisBlock {
     stateHash
     commandTransactionCount
@@ -237,9 +244,9 @@ GENESIS_BLOCK = """query GenesisBlock {
       }
     }
   }
-}"""
+}
 
-BLOCK = """query Block($stateHash: String, $height: Int) {
+query Block($stateHash: String, $height: Int) {
   block(stateHash: $stateHash, height: $height) {
     stateHash
     commandTransactionCount
@@ -304,17 +311,17 @@ BLOCK = """query Block($stateHash: String, $height: Int) {
       }
     }
   }
-}"""
+}
 
-GET_PEERS = """query Peers {
+query Peers {
   getPeers {
     peerId
     host
     libp2pPort
   }
-}"""
+}
 
-POOLED_USER_COMMANDS = """query PooledUserCommands($publicKey: PublicKey) {
+query PooledUserCommands($publicKey: PublicKey) {
   pooledUserCommands(publicKey: $publicKey) {
     id
     hash
@@ -333,9 +340,9 @@ POOLED_USER_COMMANDS = """query PooledUserCommands($publicKey: PublicKey) {
     memo
     failureReason
   }
-}"""
+}
 
-POOLED_ZKAPP_COMMANDS = """query PooledZkappCommands($publicKey: PublicKey) {
+query PooledZkappCommands($publicKey: PublicKey) {
   pooledZkappCommands(publicKey: $publicKey) {
     id
     hash
@@ -355,42 +362,42 @@ POOLED_ZKAPP_COMMANDS = """query PooledZkappCommands($publicKey: PublicKey) {
       failures
     }
   }
-}"""
+}
 
-TRANSACTION_STATUS = """query TransactionStatus($payment: ID, $zkappTransaction: ID) {
+query TransactionStatus($payment: ID, $zkappTransaction: ID) {
   transactionStatus(payment: $payment, zkappTransaction: $zkappTransaction)
-}"""
+}
 
-GENESIS_CONSTANTS = """query GenesisConstants {
+query GenesisConstants {
   genesisConstants {
     genesisTimestamp
     coinbase
     accountCreationFee
   }
-}"""
+}
 
-TRACKED_ACCOUNTS = """query TrackedAccounts {
+query TrackedAccounts {
   trackedAccounts {
     publicKey
     balance {
       total
     }
   }
-}"""
+}
 
-SNARK_POOL = """query SnarkPool {
+query SnarkPool {
   snarkPool {
     fee
     prover
     workIds
   }
-}"""
+}
 
-FORK_CONFIG = """query ForkConfig {
+query ForkConfig {
   fork_config
-}"""
+}
 
-SEND_PAYMENT = """mutation SendPayment($input: SendPaymentInput!, $signature: SignatureInput) {
+mutation SendPayment($input: SendPaymentInput!, $signature: SignatureInput) {
   sendPayment(input: $input, signature: $signature) {
     payment {
       id
@@ -408,9 +415,9 @@ SEND_PAYMENT = """mutation SendPayment($input: SendPaymentInput!, $signature: Si
       memo
     }
   }
-}"""
+}
 
-SEND_DELEGATION = """mutation SendDelegation($input: SendDelegationInput!, $signature: SignatureInput) {
+mutation SendDelegation($input: SendDelegationInput!, $signature: SignatureInput) {
   sendDelegation(input: $input, signature: $signature) {
     delegation {
       id
@@ -428,9 +435,9 @@ SEND_DELEGATION = """mutation SendDelegation($input: SendDelegationInput!, $sign
       memo
     }
   }
-}"""
+}
 
-SEND_ZKAPP = """mutation SendZkapp($input: SendZkappInput!) {
+mutation SendZkapp($input: SendZkappInput!) {
   sendZkapp(input: $input) {
     zkapp {
       id
@@ -452,53 +459,22 @@ SEND_ZKAPP = """mutation SendZkapp($input: SendZkappInput!) {
       }
     }
   }
-}"""
+}
 
-UNLOCK_ACCOUNT = """mutation UnlockAccount($input: UnlockInput!) {
+mutation UnlockAccount($input: UnlockInput!) {
   unlockAccount(input: $input) {
     publicKey
   }
-}"""
+}
 
-SET_SNARK_WORKER = """mutation SetSnarkWorker($input: SetSnarkWorkerInput!) {
+mutation SetSnarkWorker($input: SetSnarkWorkerInput!) {
   setSnarkWorker(input: $input) {
     lastSnarkWorker
   }
-}"""
+}
 
-SET_SNARK_WORK_FEE = """mutation SetSnarkWorkFee($fee: UInt64!) {
+mutation SetSnarkWorkFee($fee: UInt64!) {
   setSnarkWorkFee(input: {fee: $fee}) {
     lastFee
   }
-}"""
-
-# Deprecated aliases: GET_ACCOUNT takes an optional $token, and
-# POOLED_USER_COMMANDS an optional $publicKey.
-GET_ACCOUNT_WITH_TOKEN = GET_ACCOUNT
-POOLED_USER_COMMANDS_ALL = POOLED_USER_COMMANDS
-
-# Every document of the specification, for the conformance test.
-ALL_DOCUMENTS = [
-    SYNC_STATUS,
-    DAEMON_STATUS,
-    DAEMON_METRICS,
-    NETWORK_ID,
-    GET_ACCOUNT,
-    BEST_CHAIN,
-    GENESIS_BLOCK,
-    BLOCK,
-    GET_PEERS,
-    POOLED_USER_COMMANDS,
-    POOLED_ZKAPP_COMMANDS,
-    TRANSACTION_STATUS,
-    GENESIS_CONSTANTS,
-    TRACKED_ACCOUNTS,
-    SNARK_POOL,
-    FORK_CONFIG,
-    SEND_PAYMENT,
-    SEND_DELEGATION,
-    SEND_ZKAPP,
-    UNLOCK_ACCOUNT,
-    SET_SNARK_WORKER,
-    SET_SNARK_WORK_FEE,
-]
+}

@@ -24,7 +24,7 @@ import time
 
 import pytest
 
-from mina_sdk import Currency, MinaDaemonClient
+from mina_sdk import Currency, GraphQLError, MinaDaemonClient
 
 GRAPHQL_URI = os.environ.get("MINA_GRAPHQL_URI", "")
 SENDER_KEY = os.environ.get("MINA_TEST_SENDER_KEY", "")
@@ -173,5 +173,52 @@ class TestPayments:
         # Give the pool a moment to accept it
         time.sleep(2)
         cmds = synced_client.get_pooled_user_commands(SENDER_KEY)
-        hashes = [cmd.get("hash") for cmd in cmds]
+        hashes = [cmd.hash for cmd in cmds]
         assert result.hash in hashes, f"Transaction {result.hash} not found in pool"
+
+
+# -- Common API (spec/SPEC.md) --
+
+
+@skip_no_daemon
+def test_daemon_metrics(synced_client):
+    metrics = synced_client.get_daemon_metrics()
+    assert metrics.transaction_pool_size >= 0
+
+
+@skip_no_daemon
+def test_genesis_block_and_block_lookups(synced_client):
+    genesis = synced_client.get_genesis_block()
+    assert genesis.state_hash
+    assert genesis.staking_epoch is not None
+    assert genesis.staking_epoch.ledger_hash
+
+    # The best tip is in the transition frontier, so it can be read back by
+    # state hash and by height. The daemon does not find the frontier's root
+    # by height, so wait until the tip is above the root of a new chain
+    # (height 1).
+    tip = synced_client.get_best_chain(max_length=1)[0]
+    for _ in range(60):
+        if tip.height > 1:
+            break
+        time.sleep(5)
+        tip = synced_client.get_best_chain(max_length=1)[0]
+    assert tip.height > 1, "no block after the genesis block"
+    by_hash = synced_client.get_block(state_hash=tip.state_hash)
+    assert (by_hash.height, by_hash.previous_state_hash) == (tip.height, tip.previous_state_hash)
+    assert synced_client.get_block(height=tip.height).state_hash == tip.state_hash
+
+
+@skip_no_daemon
+def test_genesis_constants_and_pools(synced_client):
+    assert synced_client.get_genesis_constants().genesis_timestamp
+    synced_client.get_snark_pool()
+    synced_client.get_pooled_zkapp_commands()
+    synced_client.get_tracked_accounts()
+
+
+@skip_no_daemon
+def test_transaction_status_of_an_unknown_payment(synced_client):
+    # An ID that does not decode is a GraphQL error, not a transport one.
+    with pytest.raises(GraphQLError):
+        synced_client.get_transaction_status(payment="not-an-id")
