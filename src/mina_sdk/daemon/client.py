@@ -12,12 +12,30 @@ from mina_sdk.daemon import queries
 from mina_sdk.types import (
     AccountBalance,
     AccountData,
+    AccountPermissions,
+    AccountTiming,
+    AddrsAndPorts,
     BlockInfo,
+    BlockTransaction,
+    CompletedWork,
     Currency,
+    DaemonMetrics,
     DaemonStatus,
+    EpochData,
+    FeeTransfer,
+    GenesisConstants,
     PeerInfo,
+    PooledUserCommand,
     SendDelegationResult,
     SendPaymentResult,
+    SignatureInput,
+    SubmittedCommand,
+    TrackedAccount,
+    TransactionStatus,
+    VerificationKeyPermission,
+    ZkappCommandResult,
+    ZkappFailure,
+    ZkappFeePayer,
     _parse_response,
 )
 
@@ -51,6 +69,13 @@ class DaemonConnectionError(Exception):
 
 # Keep the old name as an alias for backwards compatibility
 ConnectionError = DaemonConnectionError
+
+
+class AccountNotFoundError(ValueError):
+    """Raised by ``get_account`` when the account does not exist on the ledger.
+
+    It is a ``ValueError``, which ``get_account`` raised before.
+    """
 
 
 class MinaDaemonClient:
@@ -178,21 +203,15 @@ class MinaDaemonClient:
         return data["syncStatus"]
 
     def get_daemon_status(self) -> DaemonStatus:
-        """Get comprehensive daemon status including sync state, chain height,
-        uptime, commit hash, and connected peers."""
+        """Get comprehensive daemon status: sync state, chain height, uptime,
+        commit hash, connected peers, addresses and block production keys."""
         data = self._request(queries.DAEMON_STATUS, query_name="get_daemon_status")
         status = data["daemonStatus"]
 
         peers = None
         if status.get("peers"):
-            peers = [
-                PeerInfo(
-                    peer_id=p["peerId"],
-                    host=p["host"],
-                    port=p["libp2pPort"],
-                )
-                for p in status["peers"]
-            ]
+            peers = [_parse_peer(p) for p in status["peers"]]
+        addrs = status.get("addrsAndPorts")
 
         return DaemonStatus(
             sync_status=status["syncStatus"],
@@ -202,6 +221,39 @@ class MinaDaemonClient:
             state_hash=status.get("stateHash"),
             commit_id=status.get("commitId"),
             peers=peers,
+            highest_unvalidated_block_length_received=status.get(
+                "highestUnvalidatedBlockLengthReceived"
+            ),
+            num_accounts=status.get("numAccounts"),
+            ledger_merkle_root=status.get("ledgerMerkleRoot"),
+            chain_id=status.get("chainId"),
+            catchup_status=status.get("catchupStatus"),
+            block_production_keys=status.get("blockProductionKeys"),
+            coinbase_receiver=status.get("coinbaseReceiver"),
+            addrs_and_ports=AddrsAndPorts(
+                external_ip=addrs["externalIp"],
+                bind_ip=addrs["bindIp"],
+                client_port=addrs["clientPort"],
+                libp2p_port=addrs["libp2pPort"],
+            )
+            if addrs
+            else None,
+        )
+
+    def get_daemon_metrics(self) -> DaemonMetrics:
+        """Get the daemon's transaction pool, snark pool and block production metrics."""
+        data = self._request(queries.DAEMON_METRICS, query_name="get_daemon_metrics")
+        m = _parse_response(data, ["daemonStatus", "metrics"])
+        return DaemonMetrics(
+            block_production_delay=list(m["blockProductionDelay"]),
+            transaction_pool_diff_received=m["transactionPoolDiffReceived"],
+            transaction_pool_diff_broadcasted=m["transactionPoolDiffBroadcasted"],
+            transactions_added_to_pool=m["transactionsAddedToPool"],
+            transaction_pool_size=m["transactionPoolSize"],
+            snark_pool_diff_received=m["snarkPoolDiffReceived"],
+            snark_pool_diff_broadcasted=m["snarkPoolDiffBroadcasted"],
+            pending_snark_work=m["pendingSnarkWork"],
+            snark_pool_size=m["snarkPoolSize"],
         )
 
     def get_network_id(self) -> str:
@@ -217,32 +269,20 @@ class MinaDaemonClient:
             token_id: Optional token ID (defaults to MINA token).
 
         Raises:
-            ValueError: If the account does not exist on the ledger.
+            AccountNotFoundError: If the account does not exist on the ledger.
+                It is a ``ValueError``.
         """
-        if token_id is not None:
-            variables: dict[str, Any] = {"publicKey": public_key, "token": token_id}
-            data = self._request(
-                queries.GET_ACCOUNT_WITH_TOKEN, variables=variables, query_name="get_account"
-            )
-        else:
-            variables = {"publicKey": public_key}
-            data = self._request(queries.GET_ACCOUNT, variables=variables, query_name="get_account")
+        # $token is nullable: null selects the default MINA token. Every
+        # declared variable is sent, because the daemon rejects a missing one.
+        data = self._request(
+            queries.GET_ACCOUNT,
+            variables={"publicKey": public_key, "token": token_id},
+            query_name="get_account",
+        )
         acc = data.get("account")
         if acc is None:
-            raise ValueError(f"account not found: {public_key}")
-
-        balance = acc["balance"]
-        return AccountData(
-            public_key=acc["publicKey"],
-            nonce=int(acc["nonce"]),
-            delegate=acc.get("delegate"),
-            token_id=acc.get("tokenId"),
-            balance=AccountBalance(
-                total=Currency.from_graphql(balance["total"]),
-                liquid=Currency.from_graphql(balance["liquid"]) if balance.get("liquid") else None,
-                locked=Currency.from_graphql(balance["locked"]) if balance.get("locked") else None,
-            ),
-        )
+            raise AccountNotFoundError(f"account not found: {public_key}")
+        return _parse_account(acc)
 
     def get_best_chain(self, max_length: int | None = None) -> list[BlockInfo]:
         """Get blocks from the best chain, ordered from highest to lowest.
@@ -251,69 +291,133 @@ class MinaDaemonClient:
             max_length: Maximum number of blocks to return.  ``None`` uses the
                 daemon's default.
         """
-        variables: dict[str, Any] = {}
-        if max_length is not None:
-            variables["maxLength"] = max_length
-
         data = self._request(
-            queries.BEST_CHAIN, variables=variables or None, query_name="get_best_chain"
+            queries.BEST_CHAIN, variables={"maxLength": max_length}, query_name="get_best_chain"
         )
-        chain = data.get("bestChain")
-        if not chain:
-            return []
+        return [_parse_block(b) for b in data.get("bestChain") or []]
 
-        blocks = []
-        for block in chain:
-            consensus = block["protocolState"]["consensusState"]
-            creator = block.get("creatorAccount", {})
-            creator_pk = creator.get("publicKey", "unknown")
-            if isinstance(creator_pk, dict):
-                creator_pk = str(creator_pk)
+    def get_genesis_block(self) -> BlockInfo:
+        """Get the network's genesis block."""
+        data = self._request(queries.GENESIS_BLOCK, query_name="get_genesis_block")
+        return _parse_block(_parse_response(data, ["genesisBlock"]))
 
-            blocks.append(
-                BlockInfo(
-                    state_hash=block["stateHash"],
-                    height=int(consensus["blockHeight"]),
-                    global_slot_since_hard_fork=int(consensus["slot"]),
-                    global_slot_since_genesis=int(consensus["slotSinceGenesis"]),
-                    creator_pk=creator_pk,
-                    command_transaction_count=block["commandTransactionCount"],
-                )
-            )
-        return blocks
+    def get_block(self, state_hash: str | None = None, height: int | None = None) -> BlockInfo:
+        """Get one block, by state hash or by height.
+
+        Raises:
+            ValueError: If not exactly one of ``state_hash`` and ``height`` is given.
+        """
+        if (state_hash is None) == (height is None):
+            raise ValueError("get_block: pass exactly one of state_hash and height")
+        data = self._request(
+            queries.BLOCK,
+            variables={"stateHash": state_hash, "height": height},
+            query_name="get_block",
+        )
+        block = data.get("block")
+        if block is None:
+            raise ValueError("missing field 'block' in response")
+        return _parse_block(block)
 
     def get_peers(self) -> list[PeerInfo]:
         """Get the list of connected peers."""
         data = self._request(queries.GET_PEERS, query_name="get_peers")
-        return [
-            PeerInfo(peer_id=p["peerId"], host=p["host"], port=p["libp2pPort"])
-            for p in data.get("getPeers", [])
-        ]
+        return [_parse_peer(p) for p in data.get("getPeers", [])]
 
-    def get_pooled_user_commands(self, public_key: str | None = None) -> list[dict[str, Any]]:
-        """Get pending user commands from the transaction pool.
+    def get_pooled_user_commands(self, public_key: str | None = None) -> list[PooledUserCommand]:
+        """Get pending payments and delegations from the transaction pool.
 
         Args:
             public_key: Filter by sender public key.  If ``None``, returns all
                 pending commands.
-
-        Returns:
-            Raw list of transaction dictionaries from the mempool.  Each dict
-            contains keys: ``id``, ``hash``, ``kind``, ``nonce``, ``amount``,
-            ``fee``, ``from``, ``to``.
         """
-        if public_key is not None:
-            data = self._request(
-                queries.POOLED_USER_COMMANDS,
-                variables={"publicKey": public_key},
-                query_name="get_pooled_user_commands",
+        data = self._request(
+            queries.POOLED_USER_COMMANDS,
+            variables={"publicKey": public_key},
+            query_name="get_pooled_user_commands",
+        )
+        return [
+            PooledUserCommand(
+                id=c["id"],
+                hash=c["hash"],
+                kind=c["kind"],
+                nonce=str(c["nonce"]),
+                amount=str(c["amount"]),
+                fee=str(c["fee"]),
+                from_=c["from"],
+                to=c["to"],
+                source=(c.get("source") or {}).get("publicKey", ""),
+                receiver=(c.get("receiver") or {}).get("publicKey", ""),
+                memo=c.get("memo") or "",
+                failure_reason=c.get("failureReason"),
             )
-        else:
-            data = self._request(
-                queries.POOLED_USER_COMMANDS_ALL,
-                query_name="get_pooled_user_commands",
+            for c in data.get("pooledUserCommands") or []
+        ]
+
+    def get_pooled_zkapp_commands(self, public_key: str | None = None) -> list[ZkappCommandResult]:
+        """Get pending zkApp commands; ``None`` for the commands of every fee payer."""
+        data = self._request(
+            queries.POOLED_ZKAPP_COMMANDS,
+            variables={"publicKey": public_key},
+            query_name="get_pooled_zkapp_commands",
+        )
+        return [_parse_zkapp(z) for z in data.get("pooledZkappCommands") or []]
+
+    def get_transaction_status(
+        self, payment: str | None = None, zkapp_transaction: str | None = None
+    ) -> TransactionStatus:
+        """Get the status of a payment or delegation (``payment``) or of a zkApp
+        command (``zkapp_transaction``), by its ID.
+
+        Raises:
+            ValueError: If not exactly one of the two IDs is given.
+        """
+        if (payment is None) == (zkapp_transaction is None):
+            raise ValueError(
+                "get_transaction_status: pass exactly one of payment and zkapp_transaction"
             )
-        return data.get("pooledUserCommands", [])
+        data = self._request(
+            queries.TRANSACTION_STATUS,
+            variables={"payment": payment, "zkappTransaction": zkapp_transaction},
+            query_name="get_transaction_status",
+        )
+        return TransactionStatus(_parse_response(data, ["transactionStatus"]))
+
+    def get_genesis_constants(self) -> GenesisConstants:
+        """Get the network's genesis constants."""
+        data = self._request(queries.GENESIS_CONSTANTS, query_name="get_genesis_constants")
+        c = _parse_response(data, ["genesisConstants"])
+        return GenesisConstants(
+            genesis_timestamp=c["genesisTimestamp"],
+            coinbase=_currency(c["coinbase"]),
+            account_creation_fee=_currency(c["accountCreationFee"]),
+        )
+
+    def get_tracked_accounts(self) -> list[TrackedAccount]:
+        """Get the accounts the daemon tracks (its wallet keys)."""
+        data = self._request(queries.TRACKED_ACCOUNTS, query_name="get_tracked_accounts")
+        return [
+            TrackedAccount(public_key=a["publicKey"], balance=_currency(a["balance"]["total"]))
+            for a in data.get("trackedAccounts") or []
+        ]
+
+    def get_snark_pool(self) -> list[CompletedWork]:
+        """Get the completed snark work in the snark pool."""
+        data = self._request(queries.SNARK_POOL, query_name="get_snark_pool")
+        return [
+            CompletedWork(
+                prover=w["prover"],
+                fee=_currency(w["fee"]),
+                work_ids=[int(i) for i in w["workIds"]],
+            )
+            for w in data.get("snarkPool") or []
+        ]
+
+    def get_fork_config(self) -> Any:
+        """Get the daemon's fork configuration: the configuration used to seed a
+        hardfork's genesis ledger, as JSON."""
+        data = self._request(queries.FORK_CONFIG, query_name="get_fork_config")
+        return _parse_response(data, ["fork_config"])
 
     # -- Mutations --
 
@@ -325,10 +429,12 @@ class MinaDaemonClient:
         fee: Currency | str,
         memo: str | None = None,
         nonce: int | None = None,
+        signature: SignatureInput | None = None,
     ) -> SendPaymentResult:
         """Send a payment transaction.
 
-        Requires the sender's account to be unlocked on the node.
+        Without ``signature``, the daemon signs with the sender's key, which must
+        be unlocked on the node (see ``unlock_account``).
 
         Args:
             sender: Sender public key (base58).
@@ -337,6 +443,7 @@ class MinaDaemonClient:
             fee: Transaction fee (``Currency`` or MINA string).
             memo: Optional transaction memo (max 32 bytes).
             nonce: Optional explicit nonce.  If omitted the daemon auto-increments.
+            signature: Optional signature made outside the daemon.
 
         Raises:
             GraphQLError: If the daemon rejects the transaction.
@@ -358,14 +465,11 @@ class MinaDaemonClient:
             input_obj["nonce"] = str(nonce)
 
         data = self._request(
-            queries.SEND_PAYMENT, variables={"input": input_obj}, query_name="send_payment"
+            queries.SEND_PAYMENT,
+            variables={"input": input_obj, "signature": _signature(signature)},
+            query_name="send_payment",
         )
-        payment = _parse_response(data, ["sendPayment", "payment"])
-        return SendPaymentResult(
-            id=payment["id"],
-            hash=payment["hash"],
-            nonce=int(payment["nonce"]),
-        )
+        return _parse_submitted(_parse_response(data, ["sendPayment", "payment"]))
 
     def send_delegation(
         self,
@@ -374,10 +478,12 @@ class MinaDaemonClient:
         fee: Currency | str,
         memo: str | None = None,
         nonce: int | None = None,
+        signature: SignatureInput | None = None,
     ) -> SendDelegationResult:
         """Send a stake delegation transaction.
 
-        Requires the sender's account to be unlocked on the node.
+        Without ``signature``, the daemon signs with the sender's key, which must
+        be unlocked on the node.
 
         Args:
             sender: Delegator public key (base58).
@@ -385,6 +491,7 @@ class MinaDaemonClient:
             fee: Transaction fee (``Currency`` or MINA string).
             memo: Optional transaction memo.
             nonce: Optional explicit nonce.
+            signature: Optional signature made outside the daemon.
         """
         if isinstance(fee, str):
             fee = Currency(fee)
@@ -400,14 +507,31 @@ class MinaDaemonClient:
             input_obj["nonce"] = str(nonce)
 
         data = self._request(
-            queries.SEND_DELEGATION, variables={"input": input_obj}, query_name="send_delegation"
+            queries.SEND_DELEGATION,
+            variables={"input": input_obj, "signature": _signature(signature)},
+            query_name="send_delegation",
         )
-        delegation = _parse_response(data, ["sendDelegation", "delegation"])
-        return SendDelegationResult(
-            id=delegation["id"],
-            hash=delegation["hash"],
-            nonce=int(delegation["nonce"]),
+        return _parse_submitted(_parse_response(data, ["sendDelegation", "delegation"]))
+
+    def send_zkapp(self, zkapp_command: Any) -> ZkappCommandResult:
+        """Send a signed zkApp command, as JSON in the daemon's
+        ``ZkappCommandInput`` form (for example from o1js ``toJSON()``)."""
+        data = self._request(
+            queries.SEND_ZKAPP,
+            variables={"input": {"zkappCommand": zkapp_command}},
+            query_name="send_zkapp",
         )
+        return _parse_zkapp(_parse_response(data, ["sendZkapp", "zkapp"]))
+
+    def unlock_account(self, public_key: str, password: str) -> str:
+        """Unlock an account in the daemon's keystore, so that the daemon can sign
+        payments and delegations from it. Returns its public key."""
+        data = self._request(
+            queries.UNLOCK_ACCOUNT,
+            variables={"input": {"publicKey": public_key, "password": password}},
+            query_name="unlock_account",
+        )
+        return _parse_response(data, ["unlockAccount", "publicKey"])
 
     def set_snark_worker(self, public_key: str | None) -> str | None:
         """Set or unset the SNARK worker key.
@@ -442,3 +566,184 @@ class MinaDaemonClient:
             query_name="set_snark_work_fee",
         )
         return _parse_response(data, ["setSnarkWorkFee", "lastFee"])
+
+
+# -- Parsing --
+#
+# The daemon sends most integers (UInt32, UInt64, Length, Slot) as strings and
+# amounts as nanomina strings; these helpers accept a string or a number.
+
+
+def _int(v: Any) -> int:
+    return int(v) if v is not None and v != "" else 0
+
+
+def _opt_int(v: Any) -> int | None:
+    return int(v) if v is not None and v != "" else None
+
+
+def _currency(v: Any) -> Currency:
+    return Currency.from_graphql(str(v))
+
+
+def _opt_currency(v: Any) -> Currency | None:
+    return Currency.from_graphql(str(v)) if v is not None and v != "" else None
+
+
+def _signature(s: SignatureInput | None) -> dict[str, str] | None:
+    return {"field": s.field, "scalar": s.scalar} if s is not None else None
+
+
+def _parse_peer(p: dict[str, Any]) -> PeerInfo:
+    return PeerInfo(peer_id=p["peerId"], host=p["host"], port=p["libp2pPort"])
+
+
+def _parse_account(acc: dict[str, Any]) -> AccountData:
+    balance = acc["balance"]
+    timing = acc.get("timing") or {}
+    perms = acc.get("permissions")
+    vk = (perms or {}).get("setVerificationKey")
+    parsed_timing = AccountTiming(
+        initial_minimum_balance=_opt_currency(timing.get("initialMinimumBalance")),
+        cliff_time=_opt_int(timing.get("cliffTime")),
+        cliff_amount=_opt_currency(timing.get("cliffAmount")),
+        vesting_period=_opt_int(timing.get("vestingPeriod")),
+        vesting_increment=_opt_currency(timing.get("vestingIncrement")),
+    )
+    return AccountData(
+        public_key=acc["publicKey"],
+        nonce=int(acc["nonce"]),
+        delegate=acc.get("delegate"),
+        token_id=acc.get("tokenId"),
+        balance=AccountBalance(
+            total=_currency(balance["total"]),
+            liquid=_opt_currency(balance.get("liquid")),
+            locked=_opt_currency(balance.get("locked")),
+            block_height=_opt_int(balance.get("blockHeight")),
+        ),
+        token_symbol=acc.get("tokenSymbol"),
+        voting_for=acc.get("votingFor"),
+        receipt_chain_hash=acc.get("receiptChainHash"),
+        # The daemon sends a timing object with every field null for an
+        # untimed account; that is no timing.
+        timing=parsed_timing if parsed_timing != AccountTiming() else None,
+        permissions=AccountPermissions(
+            edit_state=perms.get("editState"),
+            send=perms.get("send"),
+            receive=perms.get("receive"),
+            access=perms.get("access"),
+            set_delegate=perms.get("setDelegate"),
+            set_permissions=perms.get("setPermissions"),
+            set_verification_key=VerificationKeyPermission(
+                auth=vk["auth"], txn_version=str(vk["txnVersion"])
+            )
+            if vk
+            else None,
+            set_zkapp_uri=perms.get("setZkappUri"),
+            edit_action_state=perms.get("editActionState"),
+            set_token_symbol=perms.get("setTokenSymbol"),
+            increment_nonce=perms.get("incrementNonce"),
+            set_voting_for=perms.get("setVotingFor"),
+            set_timing=perms.get("setTiming"),
+        )
+        if perms
+        else None,
+        zkapp_state=acc.get("zkappState"),
+        proved_state=acc.get("provedState"),
+        zkapp_uri=acc.get("zkappUri"),
+    )
+
+
+def _parse_epoch(e: dict[str, Any] | None) -> EpochData | None:
+    if not e:
+        return None
+    return EpochData(
+        seed=e.get("seed") or "",
+        ledger_hash=(e.get("ledger") or {}).get("hash") or "",
+        length=_opt_int(e.get("epochLength")),
+    )
+
+
+def _parse_block(block: dict[str, Any]) -> BlockInfo:
+    """Parse a block of the common block selection (BestChain, GenesisBlock, Block)."""
+    protocol = block["protocolState"]
+    consensus = protocol["consensusState"]
+    chain = protocol.get("blockchainState") or {}
+    txs = block.get("transactions") or {}
+    creator_pk = (block.get("creatorAccount") or {}).get("publicKey") or "unknown"
+    return BlockInfo(
+        state_hash=block["stateHash"],
+        height=_int(consensus["blockHeight"]),
+        global_slot_since_hard_fork=_int(consensus["slot"]),
+        global_slot_since_genesis=_int(consensus["slotSinceGenesis"]),
+        creator_pk=creator_pk,
+        command_transaction_count=block["commandTransactionCount"],
+        previous_state_hash=protocol.get("previousStateHash") or "",
+        epoch=_int(consensus.get("epoch")),
+        block_creator=consensus.get("blockCreator") or "",
+        coinbase_receiver=consensus.get("coinbaseReceiever"),
+        staking_epoch=_parse_epoch(consensus.get("stakingEpochData")),
+        next_epoch=_parse_epoch(consensus.get("nextEpochData")),
+        date=str(chain.get("date") or ""),
+        utc_date=str(chain.get("utcDate") or ""),
+        snarked_ledger_hash=chain.get("snarkedLedgerHash") or "",
+        staged_ledger_hash=chain.get("stagedLedgerHash") or "",
+        coinbase=_opt_currency(txs.get("coinbase")),
+        coinbase_receiver_account=(txs.get("coinbaseReceiverAccount") or {}).get("publicKey"),
+        fee_transfers=[
+            FeeTransfer(recipient=f["recipient"], fee=_currency(f["fee"]), transfer_type=f["type"])
+            for f in txs.get("feeTransfer") or []
+        ],
+        user_commands=[
+            BlockTransaction(
+                id=c["id"],
+                hash=c["hash"],
+                kind=c["kind"],
+                nonce=_int(c["nonce"]),
+                source=c["source"]["publicKey"],
+                receiver=c["receiver"]["publicKey"],
+                amount=_currency(c["amount"]),
+                fee=_currency(c["fee"]),
+                memo=c["memo"],
+                failure_reason=c.get("failureReason"),
+            )
+            for c in txs.get("userCommands") or []
+        ],
+    )
+
+
+def _parse_submitted(c: dict[str, Any]) -> SubmittedCommand:
+    return SubmittedCommand(
+        id=c["id"],
+        hash=c["hash"],
+        nonce=_int(c["nonce"]),
+        kind=c.get("kind") or "",
+        source=(c.get("source") or {}).get("publicKey", ""),
+        receiver=(c.get("receiver") or {}).get("publicKey", ""),
+        amount=_opt_currency(c.get("amount")),
+        fee=_opt_currency(c.get("fee")),
+        memo=c.get("memo") or "",
+    )
+
+
+def _parse_zkapp(z: dict[str, Any]) -> ZkappCommandResult:
+    command = z["zkappCommand"]
+    body = command["feePayer"]["body"]
+    failures = z.get("failureReason")
+    return ZkappCommandResult(
+        id=z["id"],
+        hash=z["hash"],
+        memo=command.get("memo") or "",
+        fee_payer=ZkappFeePayer(
+            public_key=body["publicKey"],
+            fee=_currency(body["fee"]),
+            nonce=_int(body["nonce"]),
+            valid_until=_opt_int(body.get("validUntil")),
+        ),
+        failure_reason=[
+            ZkappFailure(index=_opt_int(f.get("index")), failures=list(f.get("failures") or []))
+            for f in failures
+        ]
+        if failures is not None
+        else None,
+    )

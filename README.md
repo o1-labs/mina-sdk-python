@@ -63,24 +63,41 @@ client = MinaDaemonClient(
 
 ## API Reference
 
+The Mina SDKs have the same API, defined in
+[mina-sdk-spec](https://github.com/o1-labs/mina-sdk-spec). `spec/` is a copy
+of it at the tag in `spec/VERSION`. `tests/test_spec.py` checks that this
+SDK's queries are the specification's documents, and CI checks that `spec/`
+is the tag's copy. The ITN client of the specification is not in this SDK yet.
+
 ### Queries
 
 | Method | Returns | Description |
 |--------|---------|-------------|
 | `get_sync_status()` | `str` | Node sync status (SYNCED, BOOTSTRAP, etc.) |
-| `get_daemon_status()` | `DaemonStatus` | Comprehensive daemon status |
+| `get_daemon_status()` | `DaemonStatus` | Daemon status: chain length, peers, addresses, block production keys |
+| `get_daemon_metrics()` | `DaemonMetrics` | Transaction and snark pool metrics, block production delay |
 | `get_network_id()` | `str` | Network identifier |
-| `get_account(public_key)` | `AccountData` | Account balance, nonce, delegate |
-| `get_best_chain(max_length)` | `list[BlockInfo]` | Recent blocks from best chain |
+| `get_account(public_key, token_id=None)` | `AccountData` | Balance, nonce, delegate, timing, permissions, zkApp state |
+| `get_best_chain(max_length=None)` | `list[BlockInfo]` | Recent blocks from the best chain |
+| `get_genesis_block()` | `BlockInfo` | The genesis block |
+| `get_block(state_hash=None, height=None)` | `BlockInfo` | One block; give exactly one of the two |
 | `get_peers()` | `list[PeerInfo]` | Connected peers |
-| `get_pooled_user_commands(public_key)` | `list[dict]` | Pending transactions |
+| `get_pooled_user_commands(public_key=None)` | `list[PooledUserCommand]` | Pending payments and delegations |
+| `get_pooled_zkapp_commands(public_key=None)` | `list[ZkappCommandResult]` | Pending zkApp commands |
+| `get_transaction_status(payment=None, zkapp_transaction=None)` | `TransactionStatus` | `PENDING`, `INCLUDED` or `UNKNOWN`; give exactly one ID |
+| `get_genesis_constants()` | `GenesisConstants` | Genesis timestamp, coinbase, account creation fee |
+| `get_tracked_accounts()` | `list[TrackedAccount]` | Accounts in the daemon's keystore |
+| `get_snark_pool()` | `list[CompletedWork]` | Completed snark work |
+| `get_fork_config()` | `Any` | The daemon's fork configuration (JSON) |
 
 ### Mutations
 
 | Method | Returns | Description |
 |--------|---------|-------------|
-| `send_payment(sender, receiver, amount, fee)` | `SendPaymentResult` | Send a payment |
-| `send_delegation(sender, delegate_to, fee)` | `SendDelegationResult` | Delegate stake |
+| `send_payment(sender, receiver, amount, fee, signature=None)` | `SendPaymentResult` | Send a payment; `signature` for one made outside the daemon |
+| `send_delegation(sender, delegate_to, fee, signature=None)` | `SendDelegationResult` | Delegate stake; `signature` likewise |
+| `send_zkapp(zkapp_command)` | `ZkappCommandResult` | Send a signed zkApp command (JSON) |
+| `unlock_account(public_key, password)` | `str` | Unlock a keystore account so the daemon can sign with it |
 | `set_snark_worker(public_key)` | `str \| None` | Set/unset SNARK worker |
 | `set_snark_work_fee(fee)` | `str` | Set SNARK work fee |
 
@@ -133,13 +150,20 @@ All response types are importable from the top-level package:
 
 ```python
 from mina_sdk import (
-    AccountBalance,    # total, liquid, locked balances
-    AccountData,       # public_key, nonce, balance, delegate, token_id
-    BlockInfo,         # state_hash, height, slots, creator, tx count
-    DaemonStatus,      # sync_status, chain height, peers, uptime
+    AccountBalance,    # total, liquid, locked balances, block height
+    AccountData,       # public_key, nonce, balance, delegate, timing, permissions, zkApp state
+    BlockInfo,         # state_hash, height, slots, creator, epochs, ledger hashes, transactions
+    DaemonStatus,      # sync_status, chain height, peers, uptime, addresses
+    DaemonMetrics,     # pool sizes and diffs, block production delay
     PeerInfo,          # peer_id, host, port
-    SendPaymentResult,     # id, hash, nonce
-    SendDelegationResult,  # id, hash, nonce
+    PooledUserCommand, # a pending payment or delegation
+    SubmittedCommand,  # result of send_payment / send_delegation
+    ZkappCommandResult,  # a pending or sent zkApp command
+    CompletedWork,     # snark pool entry
+    GenesisConstants,
+    TrackedAccount,
+    TransactionStatus,
+    SignatureInput,    # field, scalar
 )
 ```
 
@@ -175,11 +199,11 @@ The daemon is not running or not reachable at the configured URI. Check:
 
 **GraphQLError: field not found**
 
-The SDK's queries may be out of sync with the daemon's GraphQL schema. This can happen after a daemon upgrade. Check the [schema drift CI](https://github.com/MinaProtocol/mina-sdk-python/actions/workflows/schema-drift.yml) for compatibility status.
+The SDK's queries may be out of sync with the daemon's GraphQL schema. This can happen after a daemon upgrade. Check the documents against your node with mina-sdk-spec: `python3 scripts/check.py --endpoint http://your-node:3085/graphql` (in a clone of [mina-sdk-spec](https://github.com/o1-labs/mina-sdk-spec)).
 
 **Account not found**
 
-`get_account()` raises `ValueError` when the account doesn't exist on the ledger. This is normal for new accounts that haven't received any transactions yet.
+`get_account()` raises `AccountNotFoundError` (a `ValueError`) when the account doesn't exist on the ledger. This is normal for new accounts that haven't received any transactions yet.
 
 ## License
 

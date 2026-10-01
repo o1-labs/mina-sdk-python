@@ -67,6 +67,26 @@ jobs:
       - name: Dependency audit
         run: pip-audit
 
+  spec:
+    name: Specification copy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read spec/VERSION
+        id: spec
+        run: echo "version=$(cat spec/VERSION)" >> "$GITHUB_OUTPUT"
+
+      - name: Check out mina-sdk-spec at that tag
+        uses: actions/checkout@v4
+        with:
+          repository: o1-labs/mina-sdk-spec
+          ref: ${{ steps.spec.outputs.version }}
+          path: .mina-sdk-spec
+
+      - name: Check that spec/ is the tag's copy
+        run: .mina-sdk-spec/scripts/sync.sh --check .
+
   test:
     runs-on: ubuntu-latest
     strategy:
@@ -88,6 +108,7 @@ jobs:
       - name: Run unit tests with coverage
         run: |
           pytest tests/test_types.py tests/test_daemon_client.py \
+            tests/test_spec.py tests/test_common_api.py \
             -v --cov=mina_sdk --cov-report=term-missing --cov-report=xml
 
       - name: Upload coverage

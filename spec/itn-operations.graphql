@@ -1,0 +1,65 @@
+# Mina SDK ITN API: the GraphQL documents of the daemon's ITN server
+# (`--itn-graphql-port`, schema `Mina_graphql.schema_itn`) that the Mina SDKs
+# send. ITN.md describes the methods and the authentication protocol.
+#
+# Each SDK keeps a copy at a pinned tag (spec/VERSION) and a test that its ITN
+# query strings are these documents, up to white space. CI in this repository
+# validates them against schema/itn.graphql.
+#
+# The rules of operations.graphql apply: one named operation per method, and
+# nullable variables are always sent, as null when the caller omits them.
+
+query Auth {
+  auth {
+    serverUuid
+    signerSequenceNumber
+    libp2pPort
+    peerId
+    isBlockProducer
+  }
+}
+
+query SlotsWon {
+  slotsWon
+}
+
+query InternalLogs($startLogId: Int!) {
+  internalLogs(startLogId: $startLogId) {
+    id
+    timestamp
+    message
+    metadata {
+      item
+      value
+    }
+    process
+  }
+}
+
+mutation FlushInternalLogs($endLogId: Int!) {
+  flushInternalLogs(endLogId: $endLogId)
+}
+
+mutation SchedulePayments($input: PaymentsDetails!) {
+  schedulePayments(input: $input)
+}
+
+mutation ScheduleZkappCommands($input: ZkappCommandsDetails!) {
+  scheduleZkappCommands(input: $input)
+}
+
+mutation StopScheduledTransactions($handle: String!) {
+  stopScheduledTransactions(handle: $handle)
+}
+
+mutation UpdateGating($input: GatingUpdate!) {
+  updateGating(input: $input)
+}
+
+mutation StopDaemon($delaySeconds: Int, $cleanConfig: Boolean) {
+  stopDaemon(delaySeconds: $delaySeconds, cleanConfig: $cleanConfig)
+}
+
+mutation ZkappCommandLimit($limit: Int) {
+  zkAppCommandLimit(limit: $limit)
+}

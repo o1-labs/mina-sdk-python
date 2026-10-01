@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
@@ -202,11 +202,52 @@ class AccountBalance:
         total: Total balance (liquid + locked).
         liquid: Available balance for transactions.
         locked: Balance locked by a vesting schedule.
+        block_height: Height of the block the balance was read at.
     """
 
     total: Currency
     liquid: Currency | None = None
     locked: Currency | None = None
+    block_height: int | None = None
+
+
+@dataclass(frozen=True)
+class AccountTiming:
+    """Vesting schedule of a timed account."""
+
+    initial_minimum_balance: Currency | None = None
+    cliff_time: int | None = None
+    cliff_amount: Currency | None = None
+    vesting_period: int | None = None
+    vesting_increment: Currency | None = None
+
+
+@dataclass(frozen=True)
+class VerificationKeyPermission:
+    """The ``setVerificationKey`` permission: an auth level and a transaction version."""
+
+    auth: str
+    txn_version: str
+
+
+@dataclass(frozen=True)
+class AccountPermissions:
+    """An account's permissions, as the daemon names the authorization levels
+    (for example ``Signature``, ``Proof``, ``None``)."""
+
+    edit_state: str | None = None
+    send: str | None = None
+    receive: str | None = None
+    access: str | None = None
+    set_delegate: str | None = None
+    set_permissions: str | None = None
+    set_verification_key: VerificationKeyPermission | None = None
+    set_zkapp_uri: str | None = None
+    edit_action_state: str | None = None
+    set_token_symbol: str | None = None
+    increment_nonce: str | None = None
+    set_voting_for: str | None = None
+    set_timing: str | None = None
 
 
 @dataclass(frozen=True)
@@ -219,6 +260,8 @@ class AccountData:
         balance: Balance breakdown.
         delegate: Public key this account delegates stake to.
         token_id: Token identifier (default token for MINA).
+        timing: Vesting schedule; ``None`` for an untimed account.
+        zkapp_state: zkApp state; ``None`` for an account that is not a zkApp.
     """
 
     public_key: str
@@ -226,6 +269,14 @@ class AccountData:
     balance: AccountBalance
     delegate: str | None = None
     token_id: str | None = None
+    token_symbol: str | None = None
+    voting_for: str | None = None
+    receipt_chain_hash: str | None = None
+    timing: AccountTiming | None = None
+    permissions: AccountPermissions | None = None
+    zkapp_state: list[str] | None = None
+    proved_state: bool | None = None
+    zkapp_uri: str | None = None
 
 
 @dataclass(frozen=True)
@@ -241,6 +292,16 @@ class PeerInfo:
     peer_id: str
     host: str
     port: int
+
+
+@dataclass(frozen=True)
+class AddrsAndPorts:
+    """The daemon's network addresses and ports."""
+
+    external_ip: str
+    bind_ip: str
+    client_port: int
+    libp2p_port: int
 
 
 @dataclass(frozen=True)
@@ -264,11 +325,68 @@ class DaemonStatus:
     peers: list[PeerInfo] | None = None
     commit_id: str | None = None
     state_hash: str | None = None
+    highest_unvalidated_block_length_received: int | None = None
+    num_accounts: int | None = None
+    ledger_merkle_root: str | None = None
+    chain_id: str | None = None
+    catchup_status: list[str] | None = None
+    block_production_keys: list[str] | None = None
+    coinbase_receiver: str | None = None
+    addrs_and_ports: AddrsAndPorts | None = None
+
+
+@dataclass(frozen=True)
+class DaemonMetrics:
+    """Transaction pool, snark pool and block production metrics of the daemon."""
+
+    block_production_delay: list[int]
+    transaction_pool_diff_received: int
+    transaction_pool_diff_broadcasted: int
+    transactions_added_to_pool: int
+    transaction_pool_size: int
+    snark_pool_diff_received: int
+    snark_pool_diff_broadcasted: int
+    pending_snark_work: int
+    snark_pool_size: int
+
+
+@dataclass(frozen=True)
+class EpochData:
+    """Seed and ledger hash of an epoch; ``length`` only for the staking epoch."""
+
+    seed: str
+    ledger_hash: str
+    length: int | None = None
+
+
+@dataclass(frozen=True)
+class FeeTransfer:
+    """A fee transfer in a block. ``transfer_type`` is the daemon's ``type``."""
+
+    recipient: str
+    fee: Currency
+    transfer_type: str
+
+
+@dataclass(frozen=True)
+class BlockTransaction:
+    """A user command in a block."""
+
+    id: str
+    hash: str
+    kind: str
+    nonce: int
+    source: str
+    receiver: str
+    amount: Currency
+    fee: Currency
+    memo: str
+    failure_reason: str | None = None
 
 
 @dataclass(frozen=True)
 class BlockInfo:
-    """A block in the best chain.
+    """A block (from ``get_best_chain``, ``get_genesis_block`` or ``get_block``).
 
     Attributes:
         state_hash: Base58-encoded state hash.
@@ -277,6 +395,7 @@ class BlockInfo:
         global_slot_since_genesis: Absolute slot number since genesis.
         creator_pk: Block producer's public key.
         command_transaction_count: Number of user commands in this block.
+        coinbase_receiver: The consensus state's ``coinbaseReceiever``.
     """
 
     state_hash: str
@@ -285,11 +404,75 @@ class BlockInfo:
     global_slot_since_genesis: int
     creator_pk: str
     command_transaction_count: int
+    previous_state_hash: str = ""
+    epoch: int = 0
+    block_creator: str = ""
+    coinbase_receiver: str | None = None
+    staking_epoch: EpochData | None = None
+    next_epoch: EpochData | None = None
+    date: str = ""
+    utc_date: str = ""
+    snarked_ledger_hash: str = ""
+    staged_ledger_hash: str = ""
+    coinbase: Currency | None = None
+    coinbase_receiver_account: str | None = None
+    fee_transfers: list[FeeTransfer] = field(default_factory=list)
+    user_commands: list[BlockTransaction] = field(default_factory=list)
+
+
+# The keys of the dictionaries that get_pooled_user_commands returned before
+# it returned PooledUserCommand, and the attribute of each.
+_POOLED_COMMAND_KEYS = {
+    "id": "id",
+    "hash": "hash",
+    "kind": "kind",
+    "nonce": "nonce",
+    "amount": "amount",
+    "fee": "fee",
+    "from": "from_",
+    "to": "to",
+}
 
 
 @dataclass(frozen=True)
-class SendPaymentResult:
-    """Result of a successful payment transaction.
+class PooledUserCommand:
+    """A pending payment or delegation in the transaction pool.
+
+    ``from_`` is the daemon's ``from``. For compatibility with the dictionaries
+    that earlier versions returned, ``command["from"]``, ``command.get("from")``
+    and the other keys ``id``, ``hash``, ``kind``, ``nonce``, ``amount``,
+    ``fee`` and ``to`` also work.
+    """
+
+    id: str
+    hash: str
+    kind: str
+    nonce: str
+    amount: str
+    fee: str
+    from_: str
+    to: str
+    source: str = ""
+    receiver: str = ""
+    memo: str = ""
+    failure_reason: str | None = None
+
+    def __getitem__(self, key: str) -> Any:
+        if key not in _POOLED_COMMAND_KEYS:
+            raise KeyError(key)
+        return getattr(self, _POOLED_COMMAND_KEYS[key])
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """Like ``dict.get``, for the keys of earlier versions."""
+        try:
+            return self[key]
+        except KeyError:
+            return default
+
+
+@dataclass(frozen=True)
+class SubmittedCommand:
+    """A payment or delegation that the daemon accepted into its pool.
 
     Attributes:
         id: Opaque transaction identifier.
@@ -300,21 +483,92 @@ class SendPaymentResult:
     id: str
     hash: str
     nonce: int
+    kind: str = ""
+    source: str = ""
+    receiver: str = ""
+    amount: Currency | None = None
+    fee: Currency | None = None
+    memo: str = ""
+
+
+# The results of send_payment and send_delegation.
+SendPaymentResult = SubmittedCommand
+SendDelegationResult = SubmittedCommand
 
 
 @dataclass(frozen=True)
-class SendDelegationResult:
-    """Result of a successful delegation transaction.
+class SignatureInput:
+    """A signature made outside the daemon, for example with mina-signer."""
 
-    Attributes:
-        id: Opaque transaction identifier.
-        hash: Base58-encoded transaction hash.
-        nonce: The nonce used for this transaction.
+    field: str
+    scalar: str
+
+
+@dataclass(frozen=True)
+class ZkappFeePayer:
+    """The fee payer of a zkApp command."""
+
+    public_key: str
+    fee: Currency
+    nonce: int
+    valid_until: int | None = None
+
+
+@dataclass(frozen=True)
+class ZkappFailure:
+    """Why an account update of a zkApp command failed."""
+
+    index: int | None
+    failures: list[str]
+
+
+@dataclass(frozen=True)
+class ZkappCommandResult:
+    """A zkApp command in the pool, or one just sent.
+
+    ``failure_reason`` has one entry for each failing account update, and is
+    ``None`` if the command did not fail.
     """
 
     id: str
     hash: str
-    nonce: int
+    memo: str
+    fee_payer: ZkappFeePayer
+    failure_reason: list[ZkappFailure] | None = None
+
+
+@dataclass(frozen=True)
+class CompletedWork:
+    """Completed snark work in the snark pool."""
+
+    prover: str
+    fee: Currency
+    work_ids: list[int]
+
+
+class TransactionStatus(str, Enum):
+    """The status of a transaction. Members compare equal to the daemon's strings."""
+
+    PENDING = "PENDING"
+    INCLUDED = "INCLUDED"
+    UNKNOWN = "UNKNOWN"
+
+
+@dataclass(frozen=True)
+class GenesisConstants:
+    """The network's genesis constants."""
+
+    genesis_timestamp: str
+    coinbase: Currency
+    account_creation_fee: Currency
+
+
+@dataclass(frozen=True)
+class TrackedAccount:
+    """An account the daemon tracks (one of its wallet keys)."""
+
+    public_key: str
+    balance: Currency
 
 
 def _parse_response(data: dict[str, Any], path: list[str]) -> Any:
