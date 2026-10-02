@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - The common API of the Mina SDKs, from
-  [mina-sdk-spec](https://github.com/o1-labs/mina-sdk-spec) v0.1.0: `spec/`
+  [mina-sdk-spec](https://github.com/o1-labs/mina-sdk-spec) v0.1.2: `spec/`
   is a copy at the tag in `spec/VERSION`. `tests/test_spec.py` checks that
   the query strings are the specification's documents, and a CI job checks
   that `spec/` is the tag's copy.
@@ -33,7 +33,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   numbers (one request at a time, a new auth after HTTP 412) and no repeat
   after a transport error. It covers every operation of
   `spec/itn-operations.graphql`, as the Rust, Go and JS SDKs do.
-- `spec/` is mina-sdk-spec v0.1.1.
 - Integration tests of the new methods.
 - `DaemonConnectionError` exception (replaces shadowed `ConnectionError`)
 - `Currency.__rmul__` for `3 * Currency(10)` support

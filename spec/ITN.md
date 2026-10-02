@@ -7,8 +7,8 @@ ITN server (schema `Mina_graphql.schema_itn`, see
 schedule payments and zkApp commands, read internal logs, change connection
 gating and stop the daemon.
 
-The Rust, Go and JS SDKs have the same ITN client; `mina-sdk-python` has no
-ITN client yet (– in the Python column). This document and
+The Mina SDKs have the same ITN client (Python: `mina_sdk.itn`, with the
+extra `mina-sdk[itn]`). This document and
 [`itn-operations.graphql`](itn-operations.graphql) define it. The rules of
 [`SPEC.md`](SPEC.md) apply: each method sends one named operation, and
 nullable variables are always sent, as null when the caller omits them.
@@ -46,16 +46,16 @@ A client must:
 
 | Operation | Rust | Go | JS | Python | Arguments | Returns |
 |:--|:--|:--|:--|:--|:--|:--|
-| `Auth` | `auth` | `Auth` | `auth` | – | – | server UUID, sequence number, libp2p port, peer ID, block producer flag |
-| `SlotsWon` | `slots_won` | `SlotsWon` | `slotsWon` | – | – | list of global slots |
-| `InternalLogs` | `internal_logs` | `InternalLogs` | `internalLogs` | – | start log ID | list of logs (`id`, `timestamp`, `message`, `metadata` (`item`, `value`), `process?`) |
-| `FlushInternalLogs` | `flush_internal_logs` | `FlushInternalLogs` | `flushInternalLogs` | – | end log ID | string |
-| `SchedulePayments` | `schedule_payments` | `SchedulePayments` | `schedulePayments` | – | `PaymentsDetails` | handle |
-| `ScheduleZkappCommands` | `schedule_zkapp_commands` | `ScheduleZkappCommands` | `scheduleZkappCommands` | – | `ZkappCommandsDetails` | handle |
-| `StopScheduledTransactions` | `stop_scheduled_transactions` | `StopScheduledTransactions` | `stopScheduledTransactions` | – | handle | string |
-| `UpdateGating` | `update_gating` | `UpdateGating` | `updateGating` | – | `GatingUpdate` | string |
-| `StopDaemon` | `stop_daemon` | `StopDaemon` | `stopDaemon` | – | [delay seconds], [clean config] | string |
-| `ZkappCommandLimit` | `set_zkapp_command_limit` | `SetZkappCommandLimit` | `setZkappCommandLimit` | – | limit or null | limit now in force |
+| `Auth` | `auth` | `Auth` | `auth` | `auth` | – | server UUID, sequence number, libp2p port, peer ID, block producer flag |
+| `SlotsWon` | `slots_won` | `SlotsWon` | `slotsWon` | `slots_won` | – | list of global slots |
+| `InternalLogs` | `internal_logs` | `InternalLogs` | `internalLogs` | `internal_logs` | start log ID | list of logs (`id`, `timestamp`, `message`, `metadata` (`item`, `value`), `process?`) |
+| `FlushInternalLogs` | `flush_internal_logs` | `FlushInternalLogs` | `flushInternalLogs` | `flush_internal_logs` | end log ID | string |
+| `SchedulePayments` | `schedule_payments` | `SchedulePayments` | `schedulePayments` | `schedule_payments` | `PaymentsDetails` | handle |
+| `ScheduleZkappCommands` | `schedule_zkapp_commands` | `ScheduleZkappCommands` | `scheduleZkappCommands` | `schedule_zkapp_commands` | `ZkappCommandsDetails` | handle |
+| `StopScheduledTransactions` | `stop_scheduled_transactions` | `StopScheduledTransactions` | `stopScheduledTransactions` | `stop_scheduled_transactions` | handle | string |
+| `UpdateGating` | `update_gating` | `UpdateGating` | `updateGating` | `update_gating` | `GatingUpdate` | string |
+| `StopDaemon` | `stop_daemon` | `StopDaemon` | `stopDaemon` | `stop_daemon` | [delay seconds], [clean config] | string |
+| `ZkappCommandLimit` | `set_zkapp_command_limit` | `SetZkappCommandLimit` | `setZkappCommandLimit` | `set_zkapp_command_limit` | limit or null | limit now in force |
 
 The input types `PaymentsDetails`, `ZkappCommandsDetails` and `GatingUpdate`
 have the fields of [`schema/itn.graphql`](https://github.com/o1-labs/mina-sdk-spec/blob/main/schema/itn.graphql). Every SDK also
