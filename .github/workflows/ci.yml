@@ -108,7 +108,7 @@ jobs:
       - name: Run unit tests with coverage
         run: |
           pytest tests/test_types.py tests/test_daemon_client.py \
-            tests/test_spec.py tests/test_common_api.py \
+            tests/test_spec.py tests/test_common_api.py tests/test_itn.py \
             -v --cov=mina_sdk --cov-report=term-missing --cov-report=xml
 
       - name: Upload coverage

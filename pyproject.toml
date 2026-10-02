@@ -32,7 +32,10 @@ dependencies = [
 
 [project.optional-dependencies]
 archive = ["asyncpg>=0.29"]
+# The ITN client (mina_sdk.itn) signs requests with ed25519.
+itn = ["cryptography>=42"]
 dev = [
+    "cryptography>=42",
     "pytest>=8.0",
     "pytest-asyncio>=0.24",
     "pytest-cov>=6.0",
@@ -86,6 +89,7 @@ ignore = [
 "examples/*" = ["T201"]
 # The documents are copied from spec/operations.graphql and are not wrapped.
 "src/mina_sdk/daemon/queries.py" = ["E501"]
+"src/mina_sdk/itn/queries.py" = ["E501"]
 
 [tool.ruff.format]
 quote-style = "double"

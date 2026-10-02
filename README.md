@@ -67,7 +67,7 @@ The Mina SDKs have the same API, defined in
 [mina-sdk-spec](https://github.com/o1-labs/mina-sdk-spec). `spec/` is a copy
 of it at the tag in `spec/VERSION`. `tests/test_spec.py` checks that this
 SDK's queries are the specification's documents, and CI checks that `spec/`
-is the tag's copy. The ITN client of the specification is not in this SDK yet.
+is the tag's copy.
 
 ### Queries
 
@@ -89,6 +89,7 @@ is the tag's copy. The ITN client of the specification is not in this SDK yet.
 | `get_tracked_accounts()` | `list[TrackedAccount]` | Accounts in the daemon's keystore |
 | `get_snark_pool()` | `list[CompletedWork]` | Completed snark work |
 | `get_fork_config()` | `Any` | The daemon's fork configuration (JSON) |
+| `execute_query(query, variables=None, query_name="custom")` | `dict` | Run a custom GraphQL query |
 
 ### Mutations
 
@@ -100,6 +101,53 @@ is the tag's copy. The ITN client of the specification is not in this SDK yet.
 | `unlock_account(public_key, password)` | `str` | Unlock a keystore account so the daemon can sign with it |
 | `set_snark_worker(public_key)` | `str \| None` | Set/unset SNARK worker |
 | `set_snark_work_fee(fee)` | `str` | Set SNARK work fee |
+
+### ITN server (`mina_sdk.itn`)
+
+A daemon started with `ITN_FEATURES=1`, `--itn-graphql-port` and `--itn-keys`
+serves a second GraphQL API, which load testing tools use. `ItnClient` signs
+each request with an ed25519 `ItnKey` whose public half must be in
+`--itn-keys`, and it handles the daemon's sequence numbers (a new `auth`
+after a daemon restart, HTTP 412). It needs the `itn` extra:
+
+```bash
+pip install 'mina-sdk[itn]'
+```
+
+```python
+from mina_sdk.itn import ItnClient, ItnKey
+
+key = ItnKey.from_base64(open("itn_sk").read())
+print("start the daemon with --itn-keys", key.public_key_base64())
+
+with ItnClient("http://127.0.0.1:3086/graphql", key) as itn:
+    logs = itn.internal_logs(0)
+    if logs:
+        itn.flush_internal_logs(logs[-1].id)
+```
+
+| Method | GraphQL |
+|--------|---------|
+| `auth()` | `auth` (server UUID, sequence number, peer ID, block producer) |
+| `slots_won()` | `slotsWon` |
+| `internal_logs(start)` / `flush_internal_logs(end)` | `internalLogs` / `flushInternalLogs` |
+| `schedule_payments(PaymentsDetails)` | `schedulePayments` |
+| `schedule_zkapp_commands(ZkappCommandsDetails)` | `scheduleZkappCommands` |
+| `stop_scheduled_transactions(handle)` | `stopScheduledTransactions` |
+| `update_gating(GatingUpdate)` | `updateGating` |
+| `stop_daemon(delay_seconds=None, clean_config=None)` | `stopDaemon` |
+| `set_zkapp_command_limit(limit)` | `zkAppCommandLimit` |
+| `execute_query(query, variables, query_name)` | any document, sequenced and signed |
+
+Requests of one client are sent one at a time, because the daemon accepts
+only its exact next sequence number; the client is safe to share between
+threads. A sequenced request is never repeated after a transport error,
+because the daemon may already have run it. Errors: `ItnUnauthorizedError`
+(401), `ItnSequencingError` (412 after a new auth), `InvalidItnKeyError`, and
+`DaemonConnectionError` whose `__cause__` is an `ItnHttpError` with the
+status. The documents are those of `spec/itn-operations.graphql`. Integration
+tests: set `MINA_ITN_URI` and `MINA_ITN_KEY` and run
+`pytest tests/test_itn_integration.py`.
 
 ### Currency
 

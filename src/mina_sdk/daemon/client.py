@@ -190,6 +190,18 @@ class MinaDaemonClient:
             f"Failed to execute {query_name} after {self._retries} attempts: {last_error}"
         )
 
+    def execute_query(
+        self, query: str, variables: dict[str, Any] | None = None, query_name: str = "custom"
+    ) -> dict[str, Any]:
+        """Run a custom GraphQL document, with the client's transport, retries
+        and errors. Returns the ``data`` field of the response.
+
+        Raises:
+            GraphQLError: If the response contains GraphQL-level errors (not retried).
+            DaemonConnectionError: If all retry attempts fail due to network errors.
+        """
+        return self._request(query, variables=variables, query_name=query_name)
+
     # -- Queries --
 
     def get_sync_status(self) -> str:
