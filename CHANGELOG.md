@@ -26,6 +26,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   epoch data, dates, ledger hashes, coinbase, fee transfers and user
   commands; kind, source, receiver, amount, fee and memo of a sent command.
 - `AccountNotFoundError`, a `ValueError`, from `get_account`.
+- `execute_query`, for custom GraphQL documents, as in the other SDKs.
+- ITN client, `mina_sdk.itn` (extra `itn`, which adds `cryptography`):
+  `ItnClient` for the daemon's ITN GraphQL server (`--itn-graphql-port`),
+  with ed25519 request signing (`ItnKey`), the `auth` handshake, sequence
+  numbers (one request at a time, a new auth after HTTP 412) and no repeat
+  after a transport error. It covers every operation of
+  `spec/itn-operations.graphql`, as the Rust, Go and JS SDKs do.
+- `spec/` is mina-sdk-spec v0.1.1.
 - Integration tests of the new methods.
 - `DaemonConnectionError` exception (replaces shadowed `ConnectionError`)
 - `Currency.__rmul__` for `3 * Currency(10)` support

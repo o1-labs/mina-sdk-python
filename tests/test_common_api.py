@@ -400,6 +400,14 @@ def test_send_zkapp_and_unlock_account(client):
 
 
 @respx.mock
+def test_execute_query(client):
+    route = _mock({"syncStatus": "SYNCED"})
+    data = client.execute_query("query S { syncStatus }", {"x": None}, "sync")
+    assert data == {"syncStatus": "SYNCED"}
+    assert _sent(route) == {"query": "query S { syncStatus }", "variables": {"x": None}}
+
+
+@respx.mock
 def test_transaction_status_and_small_queries(client):
     route = _mock({"transactionStatus": "INCLUDED"})
     assert client.get_transaction_status(zkapp_transaction="5Jz") == TransactionStatus.INCLUDED

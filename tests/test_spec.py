@@ -1,8 +1,8 @@
 """Conformance to the specification in spec/ (a copy of o1-labs/mina-sdk-spec
-at the tag in spec/VERSION): the query strings of mina_sdk.daemon.queries are
-exactly the documents of spec/operations.graphql, up to white space, and every
-document has one. mina-sdk-spec's CI validates the documents against the
-daemon's schema.
+at the tag in spec/VERSION): the query strings of mina_sdk.daemon.queries and
+mina_sdk.itn.queries are exactly the documents of spec/operations.graphql and
+spec/itn-operations.graphql, up to white space, and every document has one.
+mina-sdk-spec's CI validates the documents against the daemon's schemas.
 """
 
 from __future__ import annotations
@@ -11,6 +11,7 @@ import re
 from pathlib import Path
 
 from mina_sdk.daemon import queries
+from mina_sdk.itn import queries as itn_queries
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -56,6 +57,10 @@ def _assert_documents_are_the_spec(spec_file: str, documents: list[str]) -> None
 
 def test_daemon_queries_are_the_spec_documents():
     _assert_documents_are_the_spec("spec/operations.graphql", queries.ALL_DOCUMENTS)
+
+
+def test_itn_queries_are_the_spec_documents():
+    _assert_documents_are_the_spec("spec/itn-operations.graphql", itn_queries.ALL_ITN_DOCUMENTS)
 
 
 def test_checker_catches_a_changed_document():
