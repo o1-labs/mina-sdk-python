@@ -15,6 +15,8 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 from mina_sdk import Currency, DaemonConnectionError, GraphQLError
 from mina_sdk.itn import (
+    CreateAccountsDetails,
+    CreatedAccount,
     GatingUpdate,
     InvalidItnKeyError,
     ItnClient,
@@ -272,3 +274,60 @@ def test_variables_of_the_operations(key):
     assert variables[4]["input"]["trustedPeers"] == [
         {"host": "1.2.3.4", "libp2pPort": 1, "peerId": "p"}
     ]
+
+
+@respx.mock
+def test_harness_support_operations(key):
+    def answer(query):
+        if "commitId" in query:
+            return {"auth": {"commitId": "abc123"}}
+        if "scheduledTransactions" in query:
+            return {"scheduledTransactions": ["h1", "h2"]}
+        if "createAccounts" in query:
+            return {
+                "createAccounts": {
+                    "handle": "h3",
+                    "accounts": [{"publicKey": "B62qa", "privateKey": "EKa"}],
+                }
+            }
+        return {"schedulePayments": "h4"}
+
+    server = MockItnServer(key)
+    data_for = server.data
+
+    def respond(request):
+        server.data = answer(json.loads(request.content)["query"])
+        return server(request)
+
+    respx.post(URL).mock(side_effect=respond)
+    assert data_for == {}
+    details = CreateAccountsDetails(
+        fee_payer="EKfee",
+        num_accounts=2,
+        fee=Currency.from_nanomina(100),
+        amount=Currency.from_nanomina(5000),
+    )
+    payments = PaymentsDetails(
+        duration_min=1,
+        tps=0.5,
+        memo_prefix="m",
+        max_fee=Currency.from_nanomina(20),
+        min_fee=Currency.from_nanomina(10),
+        amount=Currency.from_nanomina(1),
+        receiver="B62qr",
+    )
+    with _client(key) as itn:
+        assert itn.commit_id() == "abc123"
+        assert itn.scheduled_transactions() == ["h1", "h2"]
+        created = itn.create_accounts(details)
+        assert created.handle == "h3"
+        assert created.accounts == [CreatedAccount(public_key="B62qa", private_key="EKa")]
+        itn.create_accounts(details, "u1")
+        assert itn.schedule_payments_with_handle(payments, "u2") == "h4"
+    variables = [r.get("variables") for r in server.requests if r["query"] != queries.AUTH]
+    assert variables[2] == {
+        "input": {"feePayer": "EKfee", "numAccounts": 2, "fee": "100", "amount": "5000"},
+        "handle": None,
+    }
+    assert variables[3]["handle"] == "u1"
+    assert variables[4]["handle"] == "u2"

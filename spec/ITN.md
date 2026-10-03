@@ -57,6 +57,36 @@ A client must:
 | `StopDaemon` | `stop_daemon` | `StopDaemon` | `stopDaemon` | `stop_daemon` | [delay seconds], [clean config] | string |
 | `ZkappCommandLimit` | `set_zkapp_command_limit` | `SetZkappCommandLimit` | `setZkappCommandLimit` | `set_zkapp_command_limit` | limit or null | limit now in force |
 
+### Operations for harness support
+
+These operations need a daemon with MinaProtocol/mina#19616. Older daemons
+reject them, so a client uses them only against such daemons; the operations
+above do not change. A client can call `CommitId` first: an older daemon
+answers it with a GraphQL error.
+
+| Operation | Rust | Go | JS | Python | Arguments | Returns |
+|:--|:--|:--|:--|:--|:--|:--|
+| `CommitId` | `commit_id` | `CommitID` | `commitId` | `commit_id` | – | the daemon's git commit |
+| `ScheduledTransactions` | `scheduled_transactions` | `ScheduledTransactions` | `scheduledTransactions` | `scheduled_transactions` | – | handles of the running schedulers |
+| `SchedulePaymentsWithHandle` | `schedule_payments_with_handle` | `SchedulePaymentsWithHandle` | `schedulePaymentsWithHandle` | `schedule_payments_with_handle` | `PaymentsDetails`, handle | handle |
+| `ScheduleZkappCommandsWithHandle` | `schedule_zkapp_commands_with_handle` | `ScheduleZkappCommandsWithHandle` | `scheduleZkappCommandsWithHandle` | `schedule_zkapp_commands_with_handle` | `ZkappCommandsDetails`, handle | handle |
+| `CreateAccounts` | `create_accounts` | `CreateAccounts` | `createAccounts` | `create_accounts` | `CreateAccountsDetails`, [handle] | handle and the new accounts (public and private key) |
+
+- **Handles.** A handle is a UUID that the client chooses. The client records
+  it before it sends the request, so that it can find the scheduler again
+  after a lost response or a restart. A request with the handle of a running
+  scheduler starts nothing and returns that handle; so a repeat after a
+  transport error is safe for these mutations, unlike the others.
+- **`ScheduledTransactions`** lists the handles of the running payment and
+  zkApp schedulers and account-creation jobs. A client that lost its own
+  record can stop each of them with `StopScheduledTransactions`.
+- **`CreateAccounts`** replaces `mina advanced itn-create-accounts`, which
+  talks to the daemon over its bin_prot RPC. It returns the keys at once and
+  funds the accounts in the background under the handle: a client waits until
+  `ScheduledTransactions` no longer lists the handle. The amount is divided
+  among the accounts, and each account pays the account creation fee out of
+  its share.
+
 The input types `PaymentsDetails`, `ZkappCommandsDetails` and `GatingUpdate`
 have the fields of [`schema/itn.graphql`](https://github.com/o1-labs/mina-sdk-spec/blob/main/schema/itn.graphql). Every SDK also
 has a custom-query method that signs and sequences any document.

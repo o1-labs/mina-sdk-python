@@ -9,11 +9,19 @@ from __future__ import annotations
 
 import contextlib
 import os
+import time
+import uuid
 
 import pytest
 
-from mina_sdk import GraphQLError
-from mina_sdk.itn import GatingUpdate, ItnClient, ItnKey, ItnUnauthorizedError
+from mina_sdk import Currency, GraphQLError
+from mina_sdk.itn import (
+    CreateAccountsDetails,
+    GatingUpdate,
+    ItnClient,
+    ItnKey,
+    ItnUnauthorizedError,
+)
 
 URI = os.environ.get("MINA_ITN_URI", "")
 SEED = os.environ.get("MINA_ITN_KEY", "")
@@ -74,3 +82,41 @@ def test_update_gating_empty():
     # An empty update with isolate=False leaves the node's gating open.
     with _client() as itn:
         assert isinstance(itn.update_gating(GatingUpdate()), str)
+
+
+# Operations for harness support (MinaProtocol/mina#19616): only with
+# MINA_ITN_HARNESS=1, because older daemons do not have them.
+harness = pytest.mark.skipif(
+    os.environ.get("MINA_ITN_HARNESS") != "1", reason="MINA_ITN_HARNESS=1 not set"
+)
+
+
+@harness
+def test_commit_id_and_listing():
+    with _client() as itn:
+        assert len(itn.commit_id()) >= 7
+        assert isinstance(itn.scheduled_transactions(), list)
+
+
+# createAccounts sends transactions, so it also needs MINA_ITN_FEE_PAYER: the
+# base58 private key of a funded account.
+@harness
+@pytest.mark.skipif(not os.environ.get("MINA_ITN_FEE_PAYER"), reason="MINA_ITN_FEE_PAYER not set")
+def test_create_accounts():
+    handle = str(uuid.uuid4())
+    details = CreateAccountsDetails(
+        fee_payer=os.environ["MINA_ITN_FEE_PAYER"],
+        num_accounts=3,
+        fee=Currency("0.1"),
+        amount=Currency("6"),
+    )
+    with _client() as itn:
+        created = itn.create_accounts(details, handle)
+        assert created.handle == handle
+        assert len(created.accounts) == 3
+        assert itn.create_accounts(details, handle).accounts[0] == created.accounts[0]
+        for _ in range(120):
+            if handle not in itn.scheduled_transactions():
+                return
+            time.sleep(5)
+        pytest.fail(f"handle {handle} still listed after 10 minutes")
