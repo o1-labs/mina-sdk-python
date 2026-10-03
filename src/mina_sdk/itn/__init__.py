@@ -20,6 +20,9 @@ from mina_sdk.itn.errors import (
 )
 from mina_sdk.itn.key import ItnKey
 from mina_sdk.itn.types import (
+    CreateAccountsDetails,
+    CreatedAccount,
+    CreatedAccounts,
     GatingUpdate,
     ItnAuth,
     ItnLog,
@@ -30,6 +33,9 @@ from mina_sdk.itn.types import (
 )
 
 __all__ = [
+    "CreateAccountsDetails",
+    "CreatedAccount",
+    "CreatedAccounts",
     "GatingUpdate",
     "InvalidItnKeyError",
     "ItnAuth",

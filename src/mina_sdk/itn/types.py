@@ -199,3 +199,46 @@ class GatingUpdate:
             "bannedPeers": [p.to_variables() for p in self.banned_peers],
             "trustedPeers": [p.to_variables() for p in self.trusted_peers],
         }
+
+
+@dataclass(frozen=True)
+class CreateAccountsDetails:
+    """The input of ``create_accounts``.
+
+    Attributes:
+        fee_payer: Base58 private key of the account that funds the new accounts.
+        num_accounts: Number of new accounts.
+        fee: Fee of each zkApp command that creates accounts.
+        amount: Divided among the new accounts; each pays the account creation
+            fee out of its share.
+    """
+
+    fee_payer: str
+    num_accounts: int
+    fee: Currency
+    amount: Currency
+
+    def to_variables(self) -> dict[str, Any]:
+        return {
+            "feePayer": self.fee_payer,
+            "numAccounts": self.num_accounts,
+            "fee": self.fee.to_nanomina_str(),
+            "amount": self.amount.to_nanomina_str(),
+        }
+
+
+@dataclass(frozen=True)
+class CreatedAccount:
+    """A new account of ``create_accounts``: public and base58 private key."""
+
+    public_key: str
+    private_key: str
+
+
+@dataclass(frozen=True)
+class CreatedAccounts:
+    """The result of ``create_accounts``. ``scheduled_transactions`` lists the
+    handle until the background job that funds the accounts ends."""
+
+    handle: str
+    accounts: list[CreatedAccount]

@@ -63,3 +63,36 @@ mutation StopDaemon($delaySeconds: Int, $cleanConfig: Boolean) {
 mutation ZkappCommandLimit($limit: Int) {
   zkAppCommandLimit(limit: $limit)
 }
+
+# The following operations need a daemon with MinaProtocol/mina's ITN harness
+# support (caller-supplied handles, createAccounts, scheduledTransactions,
+# commitId). Older daemons reject them, so clients use them only against such
+# daemons; the operations above are unchanged.
+
+query CommitId {
+  auth {
+    commitId
+  }
+}
+
+query ScheduledTransactions {
+  scheduledTransactions
+}
+
+mutation SchedulePaymentsWithHandle($input: PaymentsDetails!, $handle: String!) {
+  schedulePayments(input: $input, handle: $handle)
+}
+
+mutation ScheduleZkappCommandsWithHandle($input: ZkappCommandsDetails!, $handle: String!) {
+  scheduleZkappCommands(input: $input, handle: $handle)
+}
+
+mutation CreateAccounts($input: CreateAccountsDetails!, $handle: String) {
+  createAccounts(input: $input, handle: $handle) {
+    handle
+    accounts {
+      publicKey
+      privateKey
+    }
+  }
+}

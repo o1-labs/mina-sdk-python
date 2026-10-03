@@ -41,6 +41,9 @@ from mina_sdk.itn import queries
 from mina_sdk.itn.errors import ItnHttpError, ItnSequencingError, ItnUnauthorizedError
 from mina_sdk.itn.key import ItnKey
 from mina_sdk.itn.types import (
+    CreateAccountsDetails,
+    CreatedAccount,
+    CreatedAccounts,
     GatingUpdate,
     ItnAuth,
     ItnLog,
@@ -318,6 +321,65 @@ class ItnClient:
             queries.ZKAPP_COMMAND_LIMIT, {"limit": limit}, "itn_set_zkapp_command_limit"
         )
         return data["zkAppCommandLimit"]
+
+    # The following methods need a daemon with MinaProtocol/mina#19616; older
+    # daemons answer them with a GraphQL error. A handle is a UUID that the
+    # caller chooses and records before the call. A call with the handle of a
+    # running scheduler starts nothing and returns that handle, so these calls
+    # may be repeated after a transport error.
+
+    def commit_id(self) -> str:
+        """The git commit of the daemon's build."""
+        data = self.execute_query(queries.COMMIT_ID, None, "itn_commit_id")
+        return data["auth"]["commitId"]
+
+    def scheduled_transactions(self) -> list[str]:
+        """Handles of the running payment and zkApp schedulers and account-creation jobs."""
+        data = self.execute_query(
+            queries.SCHEDULED_TRANSACTIONS, None, "itn_scheduled_transactions"
+        )
+        return list(data["scheduledTransactions"])
+
+    def schedule_payments_with_handle(self, details: PaymentsDetails, handle: str) -> str:
+        """Start sending payments under ``handle``; returns it."""
+        data = self.execute_query(
+            queries.SCHEDULE_PAYMENTS_WITH_HANDLE,
+            {"input": details.to_variables(), "handle": handle},
+            "itn_schedule_payments_with_handle",
+        )
+        return data["schedulePayments"]
+
+    def schedule_zkapp_commands_with_handle(
+        self, details: ZkappCommandsDetails, handle: str
+    ) -> str:
+        """Start sending zkApp commands under ``handle``; returns it."""
+        data = self.execute_query(
+            queries.SCHEDULE_ZKAPP_COMMANDS_WITH_HANDLE,
+            {"input": details.to_variables(), "handle": handle},
+            "itn_schedule_zkapp_commands_with_handle",
+        )
+        return data["scheduleZkappCommands"]
+
+    def create_accounts(
+        self, details: CreateAccountsDetails, handle: str | None = None
+    ) -> CreatedAccounts:
+        """Create ``details.num_accounts`` accounts and fund them in the
+        background; the keys are returned at once. Wait until
+        ``scheduled_transactions`` no longer lists the returned handle. ``None``
+        lets the daemon choose the handle."""
+        data = self.execute_query(
+            queries.CREATE_ACCOUNTS,
+            {"input": details.to_variables(), "handle": handle},
+            "itn_create_accounts",
+        )
+        created = data["createAccounts"]
+        return CreatedAccounts(
+            handle=created["handle"],
+            accounts=[
+                CreatedAccount(public_key=a["publicKey"], private_key=a["privateKey"])
+                for a in created["accounts"]
+            ],
+        )
 
 
 def _parse_auth(data: dict[str, Any]) -> ItnAuth:

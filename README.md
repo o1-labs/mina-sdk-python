@@ -139,6 +139,21 @@ with ItnClient("http://127.0.0.1:3086/graphql", key) as itn:
 | `set_zkapp_command_limit(limit)` | `zkAppCommandLimit` |
 | `execute_query(query, variables, query_name)` | any document, sequenced and signed |
 
+These need a daemon with MinaProtocol/mina#19616; older daemons answer them
+with a GraphQL error:
+
+| Method | GraphQL |
+|--------|---------|
+| `commit_id()` | `auth { commitId }`: the daemon's git commit |
+| `scheduled_transactions()` | `scheduledTransactions`: handles of the running schedulers |
+| `schedule_payments_with_handle(PaymentsDetails, handle)` | `schedulePayments` with a caller-chosen handle |
+| `schedule_zkapp_commands_with_handle(ZkappCommandsDetails, handle)` | `scheduleZkappCommands` with a caller-chosen handle |
+| `create_accounts(CreateAccountsDetails, handle=None)` | `createAccounts`: keys at once, funding in the background under the handle |
+
+A handle is a UUID that the caller chooses and records before the call. A
+call with the handle of a running scheduler starts nothing and returns that
+handle, so these calls may be repeated after a transport error.
+
 Requests of one client are sent one at a time, because the daemon accepts
 only its exact next sequence number; the client is safe to share between
 threads. A sequenced request is never repeated after a transport error,

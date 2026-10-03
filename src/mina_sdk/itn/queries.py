@@ -61,6 +61,37 @@ ZKAPP_COMMAND_LIMIT = """mutation ZkappCommandLimit($limit: Int) {
   zkAppCommandLimit(limit: $limit)
 }"""
 
+# The following operations need a daemon with MinaProtocol/mina#19616; older
+# daemons answer them with a GraphQL error.
+
+COMMIT_ID = """query CommitId {
+  auth {
+    commitId
+  }
+}"""
+
+SCHEDULED_TRANSACTIONS = """query ScheduledTransactions {
+  scheduledTransactions
+}"""
+
+SCHEDULE_PAYMENTS_WITH_HANDLE = """mutation SchedulePaymentsWithHandle($input: PaymentsDetails!, $handle: String!) {
+  schedulePayments(input: $input, handle: $handle)
+}"""
+
+SCHEDULE_ZKAPP_COMMANDS_WITH_HANDLE = """mutation ScheduleZkappCommandsWithHandle($input: ZkappCommandsDetails!, $handle: String!) {
+  scheduleZkappCommands(input: $input, handle: $handle)
+}"""
+
+CREATE_ACCOUNTS = """mutation CreateAccounts($input: CreateAccountsDetails!, $handle: String) {
+  createAccounts(input: $input, handle: $handle) {
+    handle
+    accounts {
+      publicKey
+      privateKey
+    }
+  }
+}"""
+
 # Every ITN document of the specification, for the conformance test.
 ALL_ITN_DOCUMENTS = [
     AUTH,
@@ -73,4 +104,9 @@ ALL_ITN_DOCUMENTS = [
     UPDATE_GATING,
     STOP_DAEMON,
     ZKAPP_COMMAND_LIMIT,
+    COMMIT_ID,
+    SCHEDULED_TRANSACTIONS,
+    SCHEDULE_PAYMENTS_WITH_HANDLE,
+    SCHEDULE_ZKAPP_COMMANDS_WITH_HANDLE,
+    CREATE_ACCOUNTS,
 ]
