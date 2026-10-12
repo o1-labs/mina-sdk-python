@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0-rc.1] - 2026-10-12
+
+From this release on, the four Mina SDKs and mina-sdk-spec have the same
+version number: SDK x.y.z implements mina-sdk-spec x.y.z. The number jumps
+because mina-sdk-go and mina-sdk-js were already at 0.3.0.
+
 ### Added
 - The common API of the Mina SDKs, from
   [mina-sdk-spec](https://github.com/o1-labs/mina-sdk-spec) v0.1.2: `spec/`
@@ -32,7 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `schedule_payments_with_handle`, `schedule_zkapp_commands_with_handle` and
   `create_accounts` (`CreateAccountsDetails`, `CreatedAccounts`). Live tests
   run with `MINA_ITN_HARNESS=1`, and `create_accounts` also needs
-  `MINA_ITN_FEE_PAYER`. `spec/` is mina-sdk-spec v0.2.0.
+  `MINA_ITN_FEE_PAYER`. `spec/` is mina-sdk-spec v0.4.0-rc.1.
 - ITN client, `mina_sdk.itn` (extra `itn`, which adds `cryptography`):
   `ItnClient` for the daemon's ITN GraphQL server (`--itn-graphql-port`),
   with ed25519 request signing (`ItnKey`), the `auth` handshake, sequence
