@@ -54,6 +54,11 @@ errors.
   signature (`{ field, scalar }`, for example from `mina-signer`). Without
   one, the daemon signs with a key from its own keystore, which must be
   unlocked (`UnlockAccount`).
+- **Valid until.** `SendPayment` and `SendDelegation` take an optional
+  `validUntil` (a global slot since genesis), sent in the input. A signed
+  command must be sent with the `validUntil` it was signed with, because the
+  slot is part of the signed payload; the daemon's default is the maximum
+  slot.
 - **Exactly one.** `Block` needs exactly one of state hash and height, and
   `TransactionStatus` exactly one of payment ID and zkApp transaction ID. The
   SDK rejects any other combination before it sends the request.
@@ -84,9 +89,11 @@ dictionary result.
 `highestBlockLengthReceived?`, `highestUnvalidatedBlockLengthReceived?`,
 `uptimeSecs?`, `stateHash?`, `commitId?`, `numAccounts?`,
 `ledgerMerkleRoot?`, `chainId?`, `catchupStatus?` (list of strings),
-`blockProductionKeys` (list), `coinbaseReceiver?`, `peers` (list of
-`PeerInfo`), `addrsAndPorts?` (`externalIp`, `bindIp`, `clientPort`,
-`libp2pPort`).
+`blockProductionKeys` (list), `coinbaseReceiver?`,
+`globalSlotSinceGenesisBestTip?`, `consensusTimeNow?` (`epoch`, `slot`,
+`globalSlot`, `startTime`, `endTime`), `peers` (list of `PeerInfo`),
+`addrsAndPorts?` (`externalIp`, `bindIp`, `clientPort`, `libp2pPort`,
+`peer?` (`host`, `libp2pPort`, `peerId`)).
 
 **`DaemonMetrics`**: `blockProductionDelay` (list of integers),
 `transactionPoolDiffReceived`, `transactionPoolDiffBroadcasted`,
@@ -113,13 +120,40 @@ dictionary result.
 `nextEpoch` (`seed`, `ledgerHash`), `date`, `utcDate`, `snarkedLedgerHash`,
 `stagedLedgerHash`, `coinbase`, `coinbaseReceiverAccount?`, `feeTransfers`
 (list of `recipient`, `fee`, `type`), `userCommands` (list of
-`BlockTransaction`).
+`BlockTransaction`), `zkappCommands` (list of `BlockZkappCommand`),
+`snarkJobs` (list of `CompletedWork`).
+
+**`BlockZkappCommand`**: `id`, `hash`, `failureReason?` (list of `index?`
+and `failures`), `zkappCommand` (`memo`, `feePayer` (`authorization`,
+`body` (`publicKey`, `fee`, `nonce`, `validUntil?`)), `accountUpdates`
+(list of `AccountUpdate`)).
+
+**`AccountUpdate`**: `authorization` (`signature?`, `proof?`), `body`
+(`publicKey`, `tokenId`, `callDepth`, `callData`, `actions` (list of lists
+of fields), `events` (list of lists of fields), `incrementNonce`,
+`useFullCommitment`, `implicitAccountCreationFee`, `balanceChange`
+(`magnitude`, `sgn`), `mayUseToken` (`parentsOwnToken`,
+`inheritFromParent`), `authorizationKind` (`isSigned`, `isProved`,
+`verificationKeyHash`), `update` (`appState` (list of nullable fields),
+`delegate?`, `zkappUri?`, `votingFor?`, `tokenSymbol?`, `verificationKey?`
+(`hash`, `data`), `timing?` (as in `AccountData`), `permissions?` (as in
+`AccountData`)), `preconditions` (`validWhile?` (`lower`, `upper`),
+`network` (`snarkedLedgerHash?`, `blockchainLength?`, `minWindowDensity?`,
+`totalCurrency?`, `globalSlotSinceGenesis?` (each `lower`, `upper`),
+`stakingEpochData` and `nextEpochData` (`seed?`, `startCheckpoint?`,
+`lockCheckpoint?`, `epochLength?` (`lower`, `upper`), `ledger` (`hash?`,
+`totalCurrency?` (`lower`, `upper`)))), `account` (`balance?`, `nonce?`
+(each `lower`, `upper`), `receiptChainHash?`, `delegate?`, `state` (list of
+nullable fields), `actionState?`, `provedState?`, `isNew?`))).
+An SDK may keep the account update as its language's generic JSON value
+instead of a typed structure, as long as the fields above are present.
 
 **`BlockTransaction`**: `id`, `hash`, `kind`, `nonce`, `source`, `receiver`,
 `amount`, `fee`, `memo`, `failureReason?`.
 
 **`PooledUserCommand`**: `id`, `hash`, `kind`, `nonce`, `amount`, `fee`,
-`from`, `to`, `source`, `receiver`, `memo`, `failureReason?`.
+`validUntil?`, `token`, `feeToken`, `from`, `to`, `source`, `receiver`,
+`memo`, `failureReason?`.
 
 **`SubmittedCommand`**: `id`, `hash`, `kind`, `nonce`, `source`, `receiver`,
 `amount`, `fee`, `memo`.

@@ -296,12 +296,28 @@ class PeerInfo:
 
 @dataclass(frozen=True)
 class AddrsAndPorts:
-    """The daemon's network addresses and ports."""
+    """The daemon's network addresses and ports.
+
+    ``peer`` is the daemon's own libp2p peer, when it has one.
+    """
 
     external_ip: str
     bind_ip: str
     client_port: int
     libp2p_port: int
+    peer: PeerInfo | None = None
+
+
+@dataclass(frozen=True)
+class ConsensusTime:
+    """A consensus time: an epoch and slot with the slot's wall-clock bounds
+    (milliseconds since the Unix epoch, as decimal strings)."""
+
+    epoch: int
+    slot: int
+    global_slot: int
+    start_time: str
+    end_time: str
 
 
 @dataclass(frozen=True)
@@ -333,6 +349,8 @@ class DaemonStatus:
     block_production_keys: list[str] | None = None
     coinbase_receiver: str | None = None
     addrs_and_ports: AddrsAndPorts | None = None
+    global_slot_since_genesis_best_tip: int | None = None
+    consensus_time_now: ConsensusTime | None = None
 
 
 @dataclass(frozen=True)
@@ -418,6 +436,8 @@ class BlockInfo:
     coinbase_receiver_account: str | None = None
     fee_transfers: list[FeeTransfer] = field(default_factory=list)
     user_commands: list[BlockTransaction] = field(default_factory=list)
+    zkapp_commands: list[BlockZkappCommand] = field(default_factory=list)
+    snark_jobs: list[CompletedWork] = field(default_factory=list)
 
 
 # The keys of the dictionaries that get_pooled_user_commands returned before
@@ -456,6 +476,9 @@ class PooledUserCommand:
     receiver: str = ""
     memo: str = ""
     failure_reason: str | None = None
+    valid_until: str | None = None
+    token: str = ""
+    fee_token: str = ""
 
     def __getitem__(self, key: str) -> Any:
         if key not in _POOLED_COMMAND_KEYS:
@@ -534,6 +557,26 @@ class ZkappCommandResult:
     hash: str
     memo: str
     fee_payer: ZkappFeePayer
+    failure_reason: list[ZkappFailure] | None = None
+
+
+@dataclass(frozen=True)
+class BlockZkappCommand:
+    """A zkApp command in a block.
+
+    ``fee_payer_authorization`` is the fee payer's signature.
+    ``account_updates`` are the command's account updates as the daemon reports
+    them (spec/SPEC.md "AccountUpdate"), kept as dictionaries.
+    ``failure_reason`` has one entry for each failing account update, and is
+    ``None`` if the command did not fail.
+    """
+
+    id: str
+    hash: str
+    memo: str
+    fee_payer: ZkappFeePayer
+    fee_payer_authorization: str
+    account_updates: list[dict[str, Any]]
     failure_reason: list[ZkappFailure] | None = None
 
 
