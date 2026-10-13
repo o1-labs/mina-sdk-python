@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`ConsensusTime`) and `addrs_and_ports.peer`; `PooledUserCommand` gets
   `valid_until`, `token` and `fee_token`. These are the fields mina-frontend
   reads.
+- `send_payment` and `send_delegation` take `valid_until`, so that a command
+  signed with one can be sent as signed.
 
 ## [0.4.0-rc.1] - 2026-10-12
 

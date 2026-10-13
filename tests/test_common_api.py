@@ -548,3 +548,14 @@ def test_pooled_user_commands_tokens(client):
         )
         [cmd] = client.get_pooled_user_commands()
     assert (cmd.valid_until, cmd.token, cmd.fee_token) == ("4294967295", "wSHV2S", "wSHV2S")
+
+
+def test_send_payment_and_delegation_send_valid_until(client):
+    with respx.mock:
+        route = _mock({"sendPayment": {"payment": {"id": "i", "hash": "h", "nonce": 1}}})
+        client.send_payment("a", "b", "1", "1", valid_until=4294967295)
+    assert _sent(route)["variables"]["input"]["validUntil"] == "4294967295"
+    with respx.mock:
+        route = _mock({"sendDelegation": {"delegation": {"id": "i", "hash": "h", "nonce": 1}}})
+        client.send_delegation("a", "b", "1", valid_until=42)
+    assert _sent(route)["variables"]["input"]["validUntil"] == "42"

@@ -452,6 +452,7 @@ class MinaDaemonClient:
         memo: str | None = None,
         nonce: int | None = None,
         signature: SignatureInput | None = None,
+        valid_until: int | None = None,
     ) -> SendPaymentResult:
         """Send a payment transaction.
 
@@ -485,6 +486,10 @@ class MinaDaemonClient:
             input_obj["memo"] = memo
         if nonce is not None:
             input_obj["nonce"] = str(nonce)
+        if valid_until is not None:
+            # The last global slot (since genesis) the command is valid in; a
+            # command signed with one must be sent with the same value.
+            input_obj["validUntil"] = str(valid_until)
 
         data = self._request(
             queries.SEND_PAYMENT,
@@ -501,6 +506,7 @@ class MinaDaemonClient:
         memo: str | None = None,
         nonce: int | None = None,
         signature: SignatureInput | None = None,
+        valid_until: int | None = None,
     ) -> SendDelegationResult:
         """Send a stake delegation transaction.
 
@@ -527,6 +533,10 @@ class MinaDaemonClient:
             input_obj["memo"] = memo
         if nonce is not None:
             input_obj["nonce"] = str(nonce)
+        if valid_until is not None:
+            # The last global slot (since genesis) the command is valid in; a
+            # command signed with one must be sent with the same value.
+            input_obj["validUntil"] = str(valid_until)
 
         data = self._request(
             queries.SEND_DELEGATION,
