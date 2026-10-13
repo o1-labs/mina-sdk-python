@@ -17,7 +17,9 @@ from mina_sdk.types import (
     AddrsAndPorts,
     BlockInfo,
     BlockTransaction,
+    BlockZkappCommand,
     CompletedWork,
+    ConsensusTime,
     Currency,
     DaemonMetrics,
     DaemonStatus,
@@ -247,9 +249,14 @@ class MinaDaemonClient:
                 bind_ip=addrs["bindIp"],
                 client_port=addrs["clientPort"],
                 libp2p_port=addrs["libp2pPort"],
+                peer=_parse_peer(addrs["peer"]) if addrs.get("peer") else None,
             )
             if addrs
             else None,
+            global_slot_since_genesis_best_tip=_opt_int(
+                status.get("globalSlotSinceGenesisBestTip")
+            ),
+            consensus_time_now=_parse_consensus_time(status.get("consensusTimeNow")),
         )
 
     def get_daemon_metrics(self) -> DaemonMetrics:
@@ -362,6 +369,9 @@ class MinaDaemonClient:
                 receiver=(c.get("receiver") or {}).get("publicKey", ""),
                 memo=c.get("memo") or "",
                 failure_reason=c.get("failureReason"),
+                valid_until=None if c.get("validUntil") is None else str(c["validUntil"]),
+                token=c.get("token") or "",
+                fee_token=c.get("feeToken") or "",
             )
             for c in data.get("pooledUserCommands") or []
         ]
@@ -721,6 +731,40 @@ def _parse_block(block: dict[str, Any]) -> BlockInfo:
             )
             for c in txs.get("userCommands") or []
         ],
+        zkapp_commands=[_parse_block_zkapp(z) for z in txs.get("zkappCommands") or []],
+        snark_jobs=[_parse_completed_work(w) for w in block.get("snarkJobs") or []],
+    )
+
+
+def _parse_consensus_time(n: dict[str, Any] | None) -> ConsensusTime | None:
+    if not n:
+        return None
+    return ConsensusTime(
+        epoch=_int(n["epoch"]),
+        slot=_int(n["slot"]),
+        global_slot=_int(n["globalSlot"]),
+        start_time=str(n["startTime"]),
+        end_time=str(n["endTime"]),
+    )
+
+
+def _parse_completed_work(w: dict[str, Any]) -> CompletedWork:
+    return CompletedWork(
+        prover=w["prover"], fee=_currency(w["fee"]), work_ids=[_int(i) for i in w["workIds"]]
+    )
+
+
+def _parse_block_zkapp(z: dict[str, Any]) -> BlockZkappCommand:
+    result = _parse_zkapp(z)
+    command = z["zkappCommand"]
+    return BlockZkappCommand(
+        id=result.id,
+        hash=result.hash,
+        memo=result.memo,
+        fee_payer=result.fee_payer,
+        fee_payer_authorization=command["feePayer"].get("authorization") or "",
+        account_updates=list(command.get("accountUpdates") or []),
+        failure_reason=result.failure_reason,
     )
 
 

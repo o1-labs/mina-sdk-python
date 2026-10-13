@@ -68,6 +68,7 @@ def test_checker_catches_a_changed_document():
     try:
         _assert_documents_are_the_spec("spec/operations.graphql", changed)
     except AssertionError as e:
-        assert "SnarkPool differs" in str(e)
+        # workIds is in the SnarkPool and (since 0.4.0-rc.2) the block documents.
+        assert "differs from spec/operations.graphql" in str(e)
     else:
         raise AssertionError("a changed document was not found")

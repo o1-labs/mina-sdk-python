@@ -27,7 +27,9 @@ from mina_sdk.types import (
     AddrsAndPorts,
     BlockInfo,
     BlockTransaction,
+    BlockZkappCommand,
     CompletedWork,
+    ConsensusTime,
     Currency,
     CurrencyFormat,
     CurrencyUnderflow,
@@ -59,7 +61,9 @@ __all__ = [
     "AddrsAndPorts",
     "BlockInfo",
     "BlockTransaction",
+    "BlockZkappCommand",
     "CompletedWork",
+    "ConsensusTime",
     "Currency",
     "CurrencyFormat",
     "CurrencyUnderflow",
@@ -85,4 +89,4 @@ __all__ = [
     "ZkappFeePayer",
 ]
 
-__version__ = "0.4.0rc1"
+__version__ = "0.4.0rc2"

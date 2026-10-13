@@ -11,10 +11,12 @@ import respx
 
 from mina_sdk import (
     AccountNotFoundError,
+    ConsensusTime,
     Currency,
     EpochData,
     FeeTransfer,
     MinaDaemonClient,
+    PeerInfo,
     SignatureInput,
     TransactionStatus,
     ZkappFailure,
@@ -439,3 +441,110 @@ def test_transaction_status_and_small_queries(client):
 
     _mock({"fork_config": {"proof": {"fork": None}}})
     assert client.get_fork_config() == {"proof": {"fork": None}}
+
+
+def test_block_zkapp_commands_and_snark_jobs(client):
+    block = _block_json()
+    block["snarkJobs"] = [{"prover": "B62qprover", "fee": "1000", "workIds": ["7", 8]}]
+    update = {
+        "authorization": {"signature": "sig", "proof": None},
+        "body": {"publicKey": "B62qzk", "balanceChange": {"magnitude": "5", "sgn": "Negative"}},
+    }
+    block["transactions"]["zkappCommands"] = [
+        {
+            "id": "zkid",
+            "hash": "zkhash",
+            "failureReason": [{"index": "1", "failures": ["Cancelled"]}],
+            "zkappCommand": {
+                "memo": "E4Y",
+                "feePayer": {
+                    "authorization": "sig",
+                    "body": {"publicKey": "B62qfp", "fee": "100", "nonce": 3, "validUntil": None},
+                },
+                "accountUpdates": [update],
+            },
+        }
+    ]
+    with respx.mock:
+        _mock({"block": block})
+        info = client.get_block(height=12)
+    assert len(info.snark_jobs) == 1
+    assert info.snark_jobs[0].prover == "B62qprover"
+    assert info.snark_jobs[0].work_ids == [7, 8]
+    [z] = info.zkapp_commands
+    assert (z.id, z.memo, z.fee_payer.public_key, z.fee_payer.nonce) == ("zkid", "E4Y", "B62qfp", 3)
+    assert z.fee_payer.valid_until is None
+    assert z.fee_payer_authorization == "sig"
+    assert z.account_updates == [update]
+    assert z.failure_reason == [ZkappFailure(index=1, failures=["Cancelled"])]
+
+    # Without the fields (an older daemon, or a block without zkApps) the
+    # lists are empty.
+    with respx.mock:
+        _mock({"block": _block_json()})
+        info = client.get_block(height=12)
+    assert info.zkapp_commands == [] and info.snark_jobs == []
+
+
+def test_daemon_status_consensus_time_and_peer(client):
+    with respx.mock:
+        _mock(
+            {
+                "daemonStatus": {
+                    "syncStatus": "SYNCED",
+                    "stateHash": "3NK",
+                    "commitId": "abc",
+                    "peers": [],
+                    "globalSlotSinceGenesisBestTip": "4200",
+                    "consensusTimeNow": {
+                        "epoch": "1",
+                        "slot": "5",
+                        "globalSlot": "4201",
+                        "startTime": "1700000000000",
+                        "endTime": "1700000020000",
+                    },
+                    "addrsAndPorts": {
+                        "externalIp": "10.0.0.1",
+                        "bindIp": "127.0.0.1",
+                        "clientPort": 8301,
+                        "libp2pPort": 8302,
+                        "peer": {"host": "10.0.0.1", "libp2pPort": 8302, "peerId": "12D3KooW"},
+                    },
+                }
+            }
+        )
+        status = client.get_daemon_status()
+    assert status.global_slot_since_genesis_best_tip == 4200
+    assert status.consensus_time_now == ConsensusTime(
+        epoch=1, slot=5, global_slot=4201, start_time="1700000000000", end_time="1700000020000"
+    )
+    assert status.addrs_and_ports.peer == PeerInfo(peer_id="12D3KooW", host="10.0.0.1", port=8302)
+
+
+def test_pooled_user_commands_tokens(client):
+    with respx.mock:
+        _mock(
+            {
+                "pooledUserCommands": [
+                    {
+                        "id": "i",
+                        "hash": "h",
+                        "kind": "PAYMENT",
+                        "nonce": 1,
+                        "amount": "1",
+                        "fee": "1",
+                        "validUntil": "4294967295",
+                        "token": "wSHV2S",
+                        "feeToken": "wSHV2S",
+                        "from": "a",
+                        "to": "b",
+                        "source": {"publicKey": "a"},
+                        "receiver": {"publicKey": "b"},
+                        "memo": "",
+                        "failureReason": None,
+                    }
+                ]
+            }
+        )
+        [cmd] = client.get_pooled_user_commands()
+    assert (cmd.valid_until, cmd.token, cmd.fee_token) == ("4294967295", "wSHV2S", "wSHV2S")
