@@ -54,6 +54,11 @@ errors.
   signature (`{ field, scalar }`, for example from `mina-signer`). Without
   one, the daemon signs with a key from its own keystore, which must be
   unlocked (`UnlockAccount`).
+- **Valid until.** `SendPayment` and `SendDelegation` take an optional
+  `validUntil` (a global slot since genesis), sent in the input. A signed
+  command must be sent with the `validUntil` it was signed with, because the
+  slot is part of the signed payload; the daemon's default is the maximum
+  slot.
 - **Exactly one.** `Block` needs exactly one of state hash and height, and
   `TransactionStatus` exactly one of payment ID and zkApp transaction ID. The
   SDK rejects any other combination before it sends the request.
