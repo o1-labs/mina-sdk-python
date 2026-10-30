@@ -76,6 +76,7 @@ is the tag's copy.
 | `get_sync_status()` | `str` | Node sync status (SYNCED, BOOTSTRAP, etc.) |
 | `get_daemon_status()` | `DaemonStatus` | Daemon status: chain length, peers, addresses, block production keys |
 | `get_daemon_metrics()` | `DaemonMetrics` | Transaction and snark pool metrics, block production delay |
+| `get_bootstrap_status()` | `BootstrapStatus` | Bootstrap phase, attempts and ledger sync progress (daemon 4.0.4) |
 | `get_network_id()` | `str` | Network identifier |
 | `get_account(public_key, token_id=None)` | `AccountData` | Balance, nonce, delegate, timing, permissions, zkApp state |
 | `get_best_chain(max_length=None)` | `list[BlockInfo]` | Recent blocks from the best chain |
@@ -84,6 +85,7 @@ is the tag's copy.
 | `get_peers()` | `list[PeerInfo]` | Connected peers |
 | `get_pooled_user_commands(public_key=None)` | `list[PooledUserCommand]` | Pending payments and delegations |
 | `get_pooled_zkapp_commands(public_key=None)` | `list[ZkappCommandResult]` | Pending zkApp commands |
+| `get_transaction_pool_status()` | `TransactionPoolStatus` | Pool size, capacity and minimum fee per weight unit (daemon 4.0.4) |
 | `get_transaction_status(payment=None, zkapp_transaction=None)` | `TransactionStatus` | `PENDING`, `INCLUDED` or `UNKNOWN`; give exactly one ID |
 | `get_genesis_constants()` | `GenesisConstants` | Genesis timestamp, coinbase, account creation fee |
 | `get_tracked_accounts()` | `list[TrackedAccount]` | Accounts in the daemon's keystore |
@@ -218,6 +220,8 @@ from mina_sdk import (
     BlockInfo,         # state_hash, height, slots, creator, epochs, ledger hashes, transactions
     DaemonStatus,      # sync_status, chain height, peers, uptime, addresses
     DaemonMetrics,     # pool sizes and diffs, block production delay
+    BootstrapStatus,   # bootstrap phase, attempts, ledger syncs (LedgerSync, LedgerSyncProgress)
+    TransactionPoolStatus,  # pool size, max size, minimum fee per weight unit
     PeerInfo,          # peer_id, host, port
     PooledUserCommand, # a pending payment or delegation
     SubmittedCommand,  # result of send_payment / send_delegation

@@ -18,6 +18,7 @@ from mina_sdk.types import (
     BlockInfo,
     BlockTransaction,
     BlockZkappCommand,
+    BootstrapStatus,
     CompletedWork,
     ConsensusTime,
     Currency,
@@ -26,6 +27,8 @@ from mina_sdk.types import (
     EpochData,
     FeeTransfer,
     GenesisConstants,
+    LedgerSync,
+    LedgerSyncProgress,
     PeerInfo,
     PooledUserCommand,
     SendDelegationResult,
@@ -33,6 +36,7 @@ from mina_sdk.types import (
     SignatureInput,
     SubmittedCommand,
     TrackedAccount,
+    TransactionPoolStatus,
     TransactionStatus,
     VerificationKeyPermission,
     ZkappCommandResult,
@@ -273,6 +277,39 @@ class MinaDaemonClient:
             snark_pool_diff_broadcasted=m["snarkPoolDiffBroadcasted"],
             pending_snark_work=m["pendingSnarkWork"],
             snark_pool_size=m["snarkPoolSize"],
+        )
+
+    def get_bootstrap_status(self) -> BootstrapStatus:
+        """Get where the daemon is in bootstrap: the phase, the attempts and
+        the progress of each ledger sync.
+
+        Needs daemon 4.0.4; an older daemon answers with a ``GraphQLError``.
+        """
+        data = self._request(queries.BOOTSTRAP_STATUS, query_name="get_bootstrap_status")
+        b = _parse_response(data, ["bootstrapStatus"])
+        return BootstrapStatus(
+            phase=b["phase"],
+            phase_started_at=b["phaseStartedAt"],
+            bootstrap_attempts=_int(b["bootstrapAttempts"]),
+            ledger_syncs=[_parse_ledger_sync(ls) for ls in b["ledgerSyncs"]],
+            bootstrap_started_at=b.get("bootstrapStartedAt"),
+            last_attempt_failure=b.get("lastAttemptFailure"),
+        )
+
+    def get_transaction_pool_status(self) -> TransactionPoolStatus:
+        """Get the transaction pool's size, capacity and minimum fee per
+        weight unit.
+
+        Needs daemon 4.0.4; an older daemon answers with a ``GraphQLError``.
+        """
+        data = self._request(
+            queries.TRANSACTION_POOL_STATUS, query_name="get_transaction_pool_status"
+        )
+        t = _parse_response(data, ["transactionPoolStatus"])
+        return TransactionPoolStatus(
+            size=_int(t["size"]),
+            max_size=_int(t["maxSize"]),
+            minimum_fee_per_weight_unit=t.get("minimumFeePerWeightUnit"),
         )
 
     def get_network_id(self) -> str:
@@ -755,6 +792,29 @@ def _parse_consensus_time(n: dict[str, Any] | None) -> ConsensusTime | None:
         global_slot=_int(n["globalSlot"]),
         start_time=str(n["startTime"]),
         end_time=str(n["endTime"]),
+    )
+
+
+def _parse_ledger_sync(ls: dict[str, Any]) -> LedgerSync:
+    p = ls["progress"]
+    return LedgerSync(
+        ledger=ls["ledger"],
+        active=bool(ls["active"]),
+        progress=LedgerSyncProgress(
+            targets=_int(p["targets"]),
+            pending_child_hashes=_int(p["pendingChildHashes"]),
+            pending_contents=_int(p["pendingContents"]),
+            synced=bool(p["synced"]),
+            answers_accepted=_int(p["answersAccepted"]),
+            answers_ignored=_int(p["answersIgnored"]),
+            answers_rejected=_int(p["answersRejected"]),
+            accounts_settled=_int(p["accountsSettled"]),
+            accounts_received=_int(p["accountsReceived"]),
+            target_set_at=p.get("targetSetAt"),
+            last_accepted_answer_at=p.get("lastAcceptedAnswerAt"),
+            num_accounts=_opt_int(p.get("numAccounts")),
+        ),
+        target=ls.get("target"),
     )
 
 

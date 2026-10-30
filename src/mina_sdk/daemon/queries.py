@@ -68,6 +68,35 @@ DAEMON_METRICS = """query DaemonMetrics {
   }
 }"""
 
+BOOTSTRAP_STATUS = """query BootstrapStatus {
+  bootstrapStatus {
+    phase
+    phaseStartedAt
+    bootstrapStartedAt
+    bootstrapAttempts
+    lastAttemptFailure
+    ledgerSyncs {
+      ledger
+      target
+      active
+      progress {
+        targets
+        targetSetAt
+        pendingChildHashes
+        pendingContents
+        synced
+        answersAccepted
+        answersIgnored
+        answersRejected
+        lastAcceptedAnswerAt
+        numAccounts
+        accountsSettled
+        accountsReceived
+      }
+    }
+  }
+}"""
+
 NETWORK_ID = """query NetworkId {
   networkID
 }"""
@@ -865,6 +894,14 @@ POOLED_ZKAPP_COMMANDS = """query PooledZkappCommands($publicKey: PublicKey) {
   }
 }"""
 
+TRANSACTION_POOL_STATUS = """query TransactionPoolStatus {
+  transactionPoolStatus {
+    size
+    maxSize
+    minimumFeePerWeightUnit
+  }
+}"""
+
 TRANSACTION_STATUS = """query TransactionStatus($payment: ID, $zkappTransaction: ID) {
   transactionStatus(payment: $payment, zkappTransaction: $zkappTransaction)
 }"""
@@ -990,6 +1027,7 @@ ALL_DOCUMENTS = [
     SYNC_STATUS,
     DAEMON_STATUS,
     DAEMON_METRICS,
+    BOOTSTRAP_STATUS,
     NETWORK_ID,
     GET_ACCOUNT,
     BEST_CHAIN,
@@ -998,6 +1036,7 @@ ALL_DOCUMENTS = [
     GET_PEERS,
     POOLED_USER_COMMANDS,
     POOLED_ZKAPP_COMMANDS,
+    TRANSACTION_POOL_STATUS,
     TRANSACTION_STATUS,
     GENESIS_CONSTANTS,
     TRACKED_ACCOUNTS,

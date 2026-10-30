@@ -21,6 +21,7 @@ Names follow each language's style. Arguments in brackets are optional.
 | `SyncStatus` | `get_sync_status` | `GetSyncStatus` | `getSyncStatus` | `get_sync_status` | – | `SyncStatus` |
 | `DaemonStatus` | `get_daemon_status` | `GetDaemonStatus` | `getDaemonStatus` | `get_daemon_status` | – | `DaemonStatus` |
 | `DaemonMetrics` | `get_daemon_metrics` | `GetDaemonMetrics` | `getDaemonMetrics` | `get_daemon_metrics` | – | `DaemonMetrics` |
+| `BootstrapStatus` | `get_bootstrap_status` | `GetBootstrapStatus` | `getBootstrapStatus` | `get_bootstrap_status` | – | `BootstrapStatus` |
 | `NetworkId` | `get_network_id` | `GetNetworkID` | `getNetworkId` | `get_network_id` | – | string |
 | `Account` | `get_account` | `GetAccount` | `getAccount` | `get_account` | public key, [token ID] | `AccountData` |
 | `BestChain` | `get_best_chain` | `GetBestChain` | `getBestChain` | `get_best_chain` | [max length] | list of `BlockInfo` |
@@ -29,6 +30,7 @@ Names follow each language's style. Arguments in brackets are optional.
 | `Peers` | `get_peers` | `GetPeers` | `getPeers` | `get_peers` | – | list of `PeerInfo` |
 | `PooledUserCommands` | `get_pooled_user_commands` | `GetPooledUserCommands` | `getPooledUserCommands` | `get_pooled_user_commands` | [public key] | list of `PooledUserCommand` |
 | `PooledZkappCommands` | `get_pooled_zkapp_commands` | `GetPooledZkappCommands` | `getPooledZkappCommands` | `get_pooled_zkapp_commands` | [public key] | list of `ZkappCommandResult` |
+| `TransactionPoolStatus` | `get_transaction_pool_status` | `GetTransactionPoolStatus` | `getTransactionPoolStatus` | `get_transaction_pool_status` | – | `TransactionPoolStatus` |
 | `TransactionStatus` | `get_transaction_status` | `GetTransactionStatus` | `getTransactionStatus` | `get_transaction_status` | payment ID **or** zkApp transaction ID | `TransactionStatus` |
 | `GenesisConstants` | `get_genesis_constants` | `GetGenesisConstants` | `getGenesisConstants` | `get_genesis_constants` | – | `GenesisConstants` |
 | `TrackedAccounts` | `get_tracked_accounts` | `GetTrackedAccounts` | `getTrackedAccounts` | `get_tracked_accounts` | – | list of `TrackedAccount` |
@@ -65,6 +67,9 @@ errors.
 - **Amounts** are `Currency` (nanomina) where the daemon sends `Amount`,
   `Fee` or `Balance`. Other numbers that the daemon sends as strings (nonces,
   slots, lengths) are integers.
+- **Daemon version.** `BootstrapStatus` and `TransactionPoolStatus` exist
+  from daemon 4.0.4. An older daemon answers them with a GraphQL error
+  (`Cannot query field`), which the SDK reports as any other GraphQL error.
 - **Errors.** A GraphQL `errors` array is a GraphQL error and is not retried.
   A transport failure or an HTTP error status is retried as configured, then
   reported as a connection error. `GetAccount` reports a null account as
@@ -99,6 +104,25 @@ dictionary result.
 `transactionPoolDiffReceived`, `transactionPoolDiffBroadcasted`,
 `transactionsAddedToPool`, `transactionPoolSize`, `snarkPoolDiffReceived`,
 `snarkPoolDiffBroadcasted`, `pendingSnarkWork`, `snarkPoolSize`.
+
+**`BootstrapStatus`**: `phase` (one of `STARTING`, `WAITING_FOR_GENESIS`,
+`WAITING_FOR_PEERS`, `FETCHING_BEST_TIP`, `LOADING_FRONTIER`,
+`SYNCING_ROOT_LEDGER`, `DOWNLOADING_SCAN_STATE`, `BUILDING_STAGED_LEDGER`,
+`SYNCING_EPOCH_LEDGERS`, `PARTICIPATING`), `phaseStartedAt`,
+`bootstrapStartedAt?`, `bootstrapAttempts`, `lastAttemptFailure?`,
+`ledgerSyncs` (list of `LedgerSync`). Times are strings, as the daemon sends
+its `Time` scalar.
+
+**`LedgerSync`**: `ledger` (one of `ROOT_SNARKED`, `STAKING_EPOCH`,
+`NEXT_EPOCH`), `target?`, `active`, `progress` (`targets`, `targetSetAt?`,
+`pendingChildHashes`, `pendingContents`, `synced`, `answersAccepted`,
+`answersIgnored`, `answersRejected`, `lastAcceptedAnswerAt?`,
+`numAccounts?`, `accountsSettled`, `accountsReceived`).
+
+**`TransactionPoolStatus`**: `size`, `maxSize`, `minimumFeePerWeightUnit?`
+(a string: nanomina per weight unit as a decimal integer or a fraction
+`n/d`; null when the pool is empty. Once the pool is full, a new command
+must pay strictly more. Payments and stake delegations have weight 1).
 
 **`PeerInfo`**: `peerId`, `host`, `port` (the libp2p port).
 
@@ -172,6 +196,9 @@ instead of a typed structure, as long as the fields above are present.
 
 ## Outside this API
 
+- `scanState` and `archiveVersionedPrecomputedBlock` (daemon 4.0.4) serve
+  SNARK workers and archive operators. Reach them with the custom-query
+  method.
 - Trustless block verification (`verifyPrecomputedBlock`, `checkBlockClaims`)
   is a feature of `mina-sdk-js` only. It needs a WASM proof verifier and is
   not a GraphQL call.

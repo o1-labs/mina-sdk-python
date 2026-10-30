@@ -369,6 +369,103 @@ class DaemonMetrics:
 
 
 @dataclass(frozen=True)
+class LedgerSyncProgress:
+    """Progress of one ledger sync during bootstrap (daemon 4.0.4).
+
+    Attributes:
+        targets: Number of target ledger hashes set so far.
+        target_set_at: When the current target was set (``None`` if none).
+        pending_child_hashes: Hash queries not yet answered.
+        pending_contents: Content queries not yet answered.
+        synced: Whether the ledger has reached its target.
+        answers_accepted: Peer answers accepted.
+        answers_ignored: Peer answers ignored (for an old target).
+        answers_rejected: Peer answers rejected (invalid).
+        last_accepted_answer_at: When the last answer was accepted (``None`` if none).
+        num_accounts: Number of accounts of the target ledger (``None`` if unknown).
+        accounts_settled: Accounts written to the ledger.
+        accounts_received: Accounts received from peers.
+    """
+
+    targets: int
+    pending_child_hashes: int
+    pending_contents: int
+    synced: bool
+    answers_accepted: int
+    answers_ignored: int
+    answers_rejected: int
+    accounts_settled: int
+    accounts_received: int
+    target_set_at: str | None = None
+    last_accepted_answer_at: str | None = None
+    num_accounts: int | None = None
+
+
+@dataclass(frozen=True)
+class LedgerSync:
+    """One ledger the daemon syncs during bootstrap (daemon 4.0.4).
+
+    Attributes:
+        ledger: Which ledger: ``ROOT_SNARKED``, ``STAKING_EPOCH`` or ``NEXT_EPOCH``.
+        target: The target ledger hash (``None`` until one is set).
+        active: Whether this sync is running.
+        progress: The sync's progress counters.
+    """
+
+    ledger: str
+    active: bool
+    progress: LedgerSyncProgress
+    target: str | None = None
+
+
+@dataclass(frozen=True)
+class BootstrapStatus:
+    """Where the daemon is in bootstrap (daemon 4.0.4).
+
+    Times are strings, as the daemon sends its ``Time`` scalar.
+
+    Attributes:
+        phase: The current phase: ``STARTING``, ``WAITING_FOR_GENESIS``,
+            ``WAITING_FOR_PEERS``, ``FETCHING_BEST_TIP``, ``LOADING_FRONTIER``,
+            ``SYNCING_ROOT_LEDGER``, ``DOWNLOADING_SCAN_STATE``,
+            ``BUILDING_STAGED_LEDGER``, ``SYNCING_EPOCH_LEDGERS`` or
+            ``PARTICIPATING``.
+        phase_started_at: When the current phase started.
+        bootstrap_started_at: When the current bootstrap attempt started
+            (``None`` before the first attempt).
+        bootstrap_attempts: Number of bootstrap attempts so far.
+        last_attempt_failure: Why the last attempt failed (``None`` if it did not).
+        ledger_syncs: The ledger syncs of this bootstrap (``LedgerSync``).
+    """
+
+    phase: str
+    phase_started_at: str
+    bootstrap_attempts: int
+    ledger_syncs: list[LedgerSync]
+    bootstrap_started_at: str | None = None
+    last_attempt_failure: str | None = None
+
+
+@dataclass(frozen=True)
+class TransactionPoolStatus:
+    """Size and fee floor of the daemon's transaction pool (daemon 4.0.4).
+
+    Attributes:
+        size: Commands in the pool.
+        max_size: The pool's capacity.
+        minimum_fee_per_weight_unit: The lowest fee per weight unit in the
+            pool, as the daemon sends it: nanomina per weight unit as a
+            decimal integer or a fraction ``n/d``. ``None`` when the pool
+            is empty. Once the pool is full, a new command must pay strictly
+            more. Payments and stake delegations have weight 1.
+    """
+
+    size: int
+    max_size: int
+    minimum_fee_per_weight_unit: str | None = None
+
+
+@dataclass(frozen=True)
 class EpochData:
     """Seed and ledger hash of an epoch; ``length`` only for the staking epoch."""
 
