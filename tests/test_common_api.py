@@ -15,6 +15,9 @@ from mina_sdk import (
     Currency,
     EpochData,
     FeeTransfer,
+    GraphQLError,
+    LedgerSync,
+    LedgerSyncProgress,
     MinaDaemonClient,
     PeerInfo,
     SignatureInput,
@@ -559,3 +562,157 @@ def test_send_payment_and_delegation_send_valid_until(client):
         route = _mock({"sendDelegation": {"delegation": {"id": "i", "hash": "h", "nonce": 1}}})
         client.send_delegation("a", "b", "1", valid_until=42)
     assert _sent(route)["variables"]["input"]["validUntil"] == "42"
+
+
+@respx.mock
+def test_bootstrap_status(client):
+    _mock(
+        {
+            "bootstrapStatus": {
+                "phase": "SYNCING_ROOT_LEDGER",
+                "phaseStartedAt": "1761840000000",
+                "bootstrapStartedAt": "1761839000000",
+                "bootstrapAttempts": 2,
+                "lastAttemptFailure": "peer disconnected",
+                "ledgerSyncs": [
+                    {
+                        "ledger": "ROOT_SNARKED",
+                        "target": "jxRootTarget",
+                        "active": True,
+                        "progress": {
+                            "targets": 1,
+                            "targetSetAt": "1761840001000",
+                            "pendingChildHashes": 12,
+                            "pendingContents": 3,
+                            "synced": False,
+                            "answersAccepted": 40,
+                            "answersIgnored": 2,
+                            "answersRejected": 1,
+                            "lastAcceptedAnswerAt": "1761840005000",
+                            "numAccounts": 1000,
+                            "accountsSettled": 600,
+                            "accountsReceived": 650,
+                        },
+                    }
+                ],
+            }
+        }
+    )
+    b = client.get_bootstrap_status()
+    assert b.phase == "SYNCING_ROOT_LEDGER"
+    assert b.phase_started_at == "1761840000000"
+    assert b.bootstrap_started_at == "1761839000000"
+    assert b.bootstrap_attempts == 2
+    assert b.last_attempt_failure == "peer disconnected"
+    assert b.ledger_syncs == [
+        LedgerSync(
+            ledger="ROOT_SNARKED",
+            active=True,
+            target="jxRootTarget",
+            progress=LedgerSyncProgress(
+                targets=1,
+                pending_child_hashes=12,
+                pending_contents=3,
+                synced=False,
+                answers_accepted=40,
+                answers_ignored=2,
+                answers_rejected=1,
+                accounts_settled=600,
+                accounts_received=650,
+                target_set_at="1761840001000",
+                last_accepted_answer_at="1761840005000",
+                num_accounts=1000,
+            ),
+        )
+    ]
+
+    # Before the first attempt: no bootstrap time, no target, nullable fields null.
+    _mock(
+        {
+            "bootstrapStatus": {
+                "phase": "WAITING_FOR_PEERS",
+                "phaseStartedAt": "1761840000000",
+                "bootstrapStartedAt": None,
+                "bootstrapAttempts": 0,
+                "lastAttemptFailure": None,
+                "ledgerSyncs": [
+                    {
+                        "ledger": "STAKING_EPOCH",
+                        "target": None,
+                        "active": False,
+                        "progress": {
+                            "targets": 0,
+                            "targetSetAt": None,
+                            "pendingChildHashes": 0,
+                            "pendingContents": 0,
+                            "synced": False,
+                            "answersAccepted": 0,
+                            "answersIgnored": 0,
+                            "answersRejected": 0,
+                            "lastAcceptedAnswerAt": None,
+                            "numAccounts": None,
+                            "accountsSettled": 0,
+                            "accountsReceived": 0,
+                        },
+                    }
+                ],
+            }
+        }
+    )
+    b = client.get_bootstrap_status()
+    assert (b.phase, b.bootstrap_started_at, b.bootstrap_attempts) == ("WAITING_FOR_PEERS", None, 0)
+    assert b.last_attempt_failure is None
+    sync = b.ledger_syncs[0]
+    assert (sync.ledger, sync.target, sync.active) == ("STAKING_EPOCH", None, False)
+    assert sync.progress.num_accounts is None
+    assert sync.progress.target_set_at is None
+    assert sync.progress.last_accepted_answer_at is None
+
+
+@respx.mock
+def test_transaction_pool_status(client):
+    _mock(
+        {
+            "transactionPoolStatus": {
+                "size": 3000,
+                "maxSize": 3000,
+                "minimumFeePerWeightUnit": "1000000/7",
+            }
+        }
+    )
+    t = client.get_transaction_pool_status()
+    assert (t.size, t.max_size) == (3000, 3000)
+    # The daemon's string, not parsed: a decimal integer or a fraction n/d.
+    assert t.minimum_fee_per_weight_unit == "1000000/7"
+
+    _mock(
+        {
+            "transactionPoolStatus": {
+                "size": 1,
+                "maxSize": 3000,
+                "minimumFeePerWeightUnit": "1000000",
+            }
+        }
+    )
+    assert client.get_transaction_pool_status().minimum_fee_per_weight_unit == "1000000"
+
+    # An empty pool has no minimum fee.
+    _mock({"transactionPoolStatus": {"size": 0, "maxSize": 3000, "minimumFeePerWeightUnit": None}})
+    t = client.get_transaction_pool_status()
+    assert t.size == 0
+    assert t.minimum_fee_per_weight_unit is None
+
+
+@respx.mock
+def test_status_queries_on_an_older_daemon_are_a_graphql_error(client):
+    # A daemon before 4.0.4 has no bootstrapStatus or transactionPoolStatus field.
+    respx.post(GRAPHQL_URL).mock(
+        return_value=httpx.Response(
+            200,
+            json={"errors": [{"message": 'Cannot query field "bootstrapStatus" on type "query"'}]},
+        )
+    )
+    with pytest.raises(GraphQLError, match="Cannot query field"):
+        client.get_bootstrap_status()
+    with pytest.raises(GraphQLError, match="get_transaction_pool_status"):
+        client.get_transaction_pool_status()
